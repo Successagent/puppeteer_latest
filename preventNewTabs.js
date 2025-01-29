@@ -1,16 +1,27 @@
 async function preventNewTabs(page) {
-  await page.evaluateOnNewDocument(() => {
-    // Override window.open to stay in the same tab
-    window.open = function (url, target, features) {
-      location.href = url;
-    };
+  // Remove target="_blank" from all <a> tags
+  await page.evaluate(() => {
+    document
+      .querySelectorAll("a")
+      .forEach((link) => link.removeAttribute("target"));
+  });
 
-    // Ensure target="_blank" links open in the same tab
-    document.addEventListener("click", (event) => {
-      const element = event.target.closest('a[target="_blank"]');
-      if (element) {
-        event.preventDefault();
-        location.href = element.href;
+  // Override window.open() to stay in the same tab
+  await page.evaluate(() => {
+    window.open = function (url) {
+      location.href = url; // Redirect in the same tab
+    };
+  });
+
+  // Modify onclick handlers to prevent new tab opening
+  await page.evaluate(() => {
+    document.querySelectorAll("[onclick]").forEach((el) => {
+      const onclickAttr = el.getAttribute("onclick");
+      if (onclickAttr && onclickAttr.includes("window.open")) {
+        el.setAttribute(
+          "onclick",
+          onclickAttr.replace("window.open", "window.location.href=")
+        );
       }
     });
   });
