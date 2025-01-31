@@ -1,125 +1,29 @@
-const axios = require("axios"); // Ensure axios is imported
-const UserAgent = require("user-agents");
-const { Cluster } = require("puppeteer-cluster");
-
-async function delay(time) {
-  return new Promise((resolve) => setTimeout(resolve, time));
-}
-
-class HumanBehavior {
-  static async randomMouseMovement(page) {
-    const viewport = page.viewport();
-    for (let i = 0; i < 5; i++) {
-      const x = Math.random() * viewport.width;
-      const y = Math.random() * viewport.height;
-      await page.mouse.move(x, y, {
-        steps: Math.floor(Math.random() * 20) + 5,
-      });
-      await delay(Math.random() * 1000 + 500);
-    }
-  }
-
-  static async humanType(page, element, text) {
-    for (const char of text) {
-      await element.type(char, { delay: Math.random() * 100 + 50 });
-      if (Math.random() > 0.95) await delay(500); // Random pause
-    }
-  }
-}
-
-// Generate a random viewport size
-function getRandomViewport() {
-  const width = Math.floor(Math.random() * (1560 - 1024)) + 1024; // Width between 1024 and 2560
-  const height = Math.floor(Math.random() * (1000 - 768)) + 768; // Height between 768 and 1440
-  return { width, height };
-}
-
-const randomViewports = [
-  {
-    width: 360,
-    height: 640,
-    deviceScaleFactor: 2,
-    isMobile: true,
-    hasTouch: true,
-  }, // Common Android
-  {
-    width: 375,
-    height: 812,
-    deviceScaleFactor: 3,
-    isMobile: true,
-    hasTouch: true,
-  }, // iPhone X/11 Pro
-  {
-    width: 414,
-    height: 896,
-    deviceScaleFactor: 2,
-    isMobile: true,
-    hasTouch: true,
-  }, // iPhone XR/11
-  {
-    width: 412,
-    height: 915,
-    deviceScaleFactor: 2.625,
-    isMobile: true,
-    hasTouch: true,
-  }, // Pixel 7
-  {
-    width: 390,
-    height: 844,
-    deviceScaleFactor: 3,
-    isMobile: true,
-    hasTouch: true,
-  }, // iPhone 12/13/14
-  {
-    width: 412,
-    height: 869,
-    deviceScaleFactor: 2.25,
-    isMobile: true,
-    hasTouch: true,
-  }, // Galaxy S20
-  {
-    width: 393,
-    height: 852,
-    deviceScaleFactor: 3,
-    isMobile: true,
-    hasTouch: true,
-  }, // iPhone 14 Pro
-  {
-    width: 430,
-    height: 932,
-    deviceScaleFactor: 3,
-    isMobile: true,
-    hasTouch: true,
-  }, // iPhone 14 Pro Max
-  {
-    width: 360,
-    height: 780,
-    deviceScaleFactor: 2.5,
-    isMobile: true,
-    hasTouch: true,
-  }, // Samsung Galaxy S22
-  {
-    width: 375,
-    height: 667,
-    deviceScaleFactor: 2,
-    isMobile: true,
-    hasTouch: true,
-  }, // iPhone SE (2nd Gen)
-];
+import { Cluster } from "puppeteer-cluster";
+import UserAgent from "user-agents";
+// import { clickWithHumanLikeMovement } from "./actions.js";
+import { delay } from "./delay.js";
+import { injectLocalStorage } from "./injectLocal.js";
+import { loadLocalStorage, saveLocalStorage } from "./localStorageManager.js";
+import {
+  getDesktopRandomViewport,
+  mobileRandomViewports,
+} from "./viewports.js";
 
 function getRandomMobileViewport() {
-  return randomViewports[Math.floor(Math.random() * randomViewports.length)];
+  return mobileRandomViewports[
+    Math.floor(Math.random() * mobileRandomViewports.length)
+  ];
 }
 
 const userAgent = new UserAgent({ deviceCategory: "desktop" });
-const randomViewport = getRandomViewport();
+const randomViewport = getDesktopRandomViewport();
 
 let index = 0;
 
 (async () => {
   const cluster = await Cluster.launch({
     concurrency: Cluster.CONCURRENCY_CONTEXT,
-    maxConcurrency: 1,
+    maxConcurrency: 3,
     puppeteerOptions: {
       headless: false,
       executablePath: "C:/Program Files/Google/Chrome/Application/chrome.exe",
@@ -130,59 +34,70 @@ let index = 0;
         "--disable-dev-shm-usage",
         "--disable-blink-features=AutomationControlled",
         `--user-agent=${userAgent.toString()}`,
+        "--disable-web-security",
+        "--disable-features=site-per-process",
+        "--font-render-hinting=none", // Reduce fingerprint variability
       ],
       defaultViewport: randomViewport,
+      timeout: 100000,
     },
   });
-
   await cluster.task(async ({ page, data: url }) => {
-    const waitForViggetteBanner = async () => {
-      // const selector = "#blog_item_0";
-      // await page.click(selector);
-      // await delay(3000 + Math.random() * 5000); // Random delay
-      // await page.click(
-      //   "#root > div.update_news_item > div.related_news_sect_wrapper > a"
-      // );
-      // await delay(4000 + Math.random() * 10000); // Random delay
-    };
+    try {
+      await page.setExtraHTTPHeaders({ "Accept-Language": "en-US,en;q=0.9" });
+      // Load existing localStorage data
+      const storedData = await loadLocalStorage();
+      await injectLocalStorage(page, storedData);
 
-    await page.setExtraHTTPHeaders({ "Accept-Language": "en-US,en;q=0.9" });
+      await page.goto(url, {
+        waitUntil: "networkidle2",
+        timeout: 0,
+      });
 
-    await page.goto(url, { waitUntil: "networkidle2", timeout: 0 });
-    console.log(`Task done ${index++}`);
+      // Perform search
+      // await page.type("#APjFqb", searchText);
+      // await page.keyboard.press("Enter");
+      await delay(80000 + Math.random * 80000);
+      console.log("Video Watched");
 
-    await HumanBehavior.randomMouseMovement(page);
-    console.log(`Mouse Moved`);
-
-    // await new Promise.all([await waitForViggetteBanner()]);
-    await delay(70000);
+      // Save updated localStorage
+      const newStorage = await page.evaluate(() =>
+        Object.assign({}, localStorage)
+      );
+      await saveLocalStorage(newStorage);
+    } catch (error) {
+      console.log(error);
+    }
   });
 
-  // cluster.queue("https://bot.sannysoft.com");
-  // cluster.queue("https://bot.sannysoft.com");
-  // cluster.queue("https://www.google.com/");
-  // cluster.queue("https://www.google.com/");
-  // cluster.queue("https://spdload.com/blog/what-is-saas-product/");
-  // cluster.queue("https://spdload.com/blog/what-is-saas-product/");
-
+  cluster.queue("https://youtu.be/R5QNSd44MDo");
+  cluster.queue("https://youtu.be/R5QNSd44MDo");
+  cluster.queue("https://youtu.be/R5QNSd44MDo");
+  cluster.queue("https://youtu.be/R5QNSd44MDo");
   // Function to continuously add tasks to the cluster
-  const addTasksContinuously = () => {
-    setInterval(async () => {
-      cluster.queue("https://www.whatismybrowser.com/");
-    }, 10000); // Interval in milliseconds (e.g., 10 seconds)
-  };
+  // const addTasksContinuously = () => {
+  //   setInterval(async () => {
+  //     // cluster.queue("https://www.whatismybrowser.com/");
+  //     // cluster.queue("https://www.google.com/");
+  //     // cluster.queue("https://success-sport.vercel.app/");
+  //     // cluster.queue("Saas Product");
+  //     // cluster.queue("Crypto");
+  //     // cluster.queue("Tech");
+  //     // cluster.queue("https://bot.sannysoft.com");
+  //   }, 10000); // Interval in milliseconds (e.g., 10 seconds)
+  // };
 
   // Start adding tasks to the cluster continuously
-  addTasksContinuously();
+  // addTasksContinuously();
+  console.log("Shutting down...");
+  await cluster.idle();
+  await cluster.close();
 
-  const gracefulShutdown = async () => {
-    console.log("Shutting down...");
-    await cluster.idle();
-    await cluster.close();
-    process.exit(0);
-  };
+  // const gracefulShutdown = async () => {
+  //   process.exit(0);
+  // };
 
   // Handle SIGINT signal (Ctrl+C)
-  process.on("SIGINT", gracefulShutdown);
-  process.on("SIGTERM", gracefulShutdown);
+  // process.on("SIGINT", gracefulShutdown);
+  // process.on("SIGTERM", gracefulShutdown);
 })();
