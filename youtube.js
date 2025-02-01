@@ -41,7 +41,7 @@ const randomViewport = getDesktopRandomViewport();
     },
     retryLimit: 3, // Retry failed tasks up to 3 times
     retryDelay: 5000, // Wait 5 seconds between retries
-    timeout: 90000,
+    timeout: 120000,
   });
 
   // Handle cluster task errors
