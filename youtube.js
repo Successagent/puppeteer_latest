@@ -1,28 +1,48 @@
 import { Cluster } from "puppeteer-cluster";
 import UserAgent from "user-agents";
-import { getDesktopRandomViewport } from "./viewports.js";
+import { desktopRandomViewports, mobileRandomViewports } from "./viewports.js";
 import { loadLocalStorage, saveLocalStorage } from "./localStorageManager.js";
 import { injectLocalStorage } from "./injectLocal.js";
 import { delay } from "./delay.js";
+import puppeteer from "puppeteer-extra";
+import StealthPlugin from "puppeteer-extra-plugin-stealth";
+import {
+  androidBypass,
+  iphoneBypass,
+  nuclearBypass,
+} from "./bypassDevicesDetections.js";
+import { androidDevices, iphoneDevices } from "./devices.js";
+puppeteer.use(StealthPlugin());
 
 const YouTubeUrls = [
-  "https://youtu.be/R5QNSd44MDo",
-  "https://youtu.be/0roXAZSAROo",
-  "https://youtu.be/OqDyXmneVdA",
+  "https://www.facebook.com/profile.php?id=61551017486558",
+  "https://www.facebook.com/profile.php?id=61551017486558",
+
   // Add more YouTube URLs here
 ];
 
 // Duration settings (in minutes)
-const MIN_WATCH_TIME = 2;
-const MAX_WATCH_TIME = 5;
+const MIN_WATCH_TIME = 8;
+const MAX_WATCH_TIME = 10;
 
 const userAgent = new UserAgent({ deviceCategory: "desktop" });
-const randomViewport = getDesktopRandomViewport();
+
+function getRandomMobileViewport() {
+  return mobileRandomViewports[
+    Math.floor(Math.random() * mobileRandomViewports.length)
+  ];
+}
+function getRandomDesktopViewport() {
+  return desktopRandomViewports[
+    Math.floor(Math.random() * desktopRandomViewports.length)
+  ];
+}
 
 (async () => {
   const cluster = await Cluster.launch({
     concurrency: Cluster.CONCURRENCY_CONTEXT,
     maxConcurrency: 2, // Adjust based on your system capabilities
+    puppeteer,
     puppeteerOptions: {
       headless: false,
       executablePath: "C:/Program Files/Google/Chrome/Application/chrome.exe",
@@ -37,11 +57,12 @@ const randomViewport = getDesktopRandomViewport();
         "--font-render-hinting=none", // Reduce fingerprint variability
         "--disable-features=PreloadMediaEngagementData",
         "--autoplay-policy=no-user-gesture-required",
+        "--disable-features=IsolateOrigins,site-per-process",
       ],
     },
     retryLimit: 3, // Retry failed tasks up to 3 times
     retryDelay: 5000, // Wait 5 seconds between retries
-    timeout: 120000,
+    timeout: 80000, // 1 minute timeout for each task
   });
 
   // Handle cluster task errors
@@ -53,8 +74,18 @@ const randomViewport = getDesktopRandomViewport();
   await cluster.task(async ({ page, data: url }) => {
     try {
       await page.setExtraHTTPHeaders({ "Accept-Language": "en-US,en;q=0.9" });
-      await page.setUserAgent(userAgent.toString());
-      await page.setViewport(randomViewport);
+
+      const selectedIPhoneDevice =
+        iphoneDevices[Math.floor(Math.random() * iphoneDevices.length + 1)];
+      // console.log(selectedIPhoneDevice);
+      const selectedAndroidDevice =
+        androidDevices[Math.floor(Math.random() * androidDevices.length + 1)];
+
+      console.log(selectedAndroidDevice);
+
+      await page.emulate(selectedAndroidDevice);
+      await androidBypass(page);
+
       // Load existing localStorage data
       const storedData = await loadLocalStorage();
       await injectLocalStorage(page, storedData);
@@ -62,25 +93,21 @@ const randomViewport = getDesktopRandomViewport();
       await page.setDefaultNavigationTimeout(120000); // 2 minutes for navigation
       await page.setDefaultTimeout(60000); // 1 minute for all element waits
       await page.setJavaScriptEnabled(true);
-
       const response = await page.goto(url, {
         waitUntil: "domcontentloaded",
-        timeout: delay(90000 + Math.random() * 120000),
+        timeout: delay(9000 + Math.random() * 12000),
       });
 
-      if (!response.ok()) {
-        throw new Error(`Failed to load: ${response.status()}`);
+      // Check if response exists
+      if (!response) {
+        throw new Error("Navigation failed: No response received");
       }
 
-      // Wait for critical elements
-      await Promise.all([
-        page.waitForSelector("#title h1", { timeout: 90000 }),
-        page.waitForSelector(".html5-video-player", { timeout: 90000 }),
-      ]);
-      // Start video playback
-      await page.$eval(".html5-video-player", (player) => {
-        player.playVideo();
-      });
+      // Check HTTP status
+      if (!response.ok()) {
+        console.log(`HTTP ${response.status()}: ${await response.text()}`);
+        throw new Error(`Page load failed: HTTP ${response.status()}`);
+      }
 
       console.log(`▶️ Started playback: ${url}`);
 
@@ -98,7 +125,7 @@ const randomViewport = getDesktopRandomViewport();
       );
       await saveLocalStorage(newStorage);
 
-      // Progressive waiting with random interactions
+      // // Progressive waiting with random interactions
       const startTime = Date.now();
       while (Date.now() - startTime < watchDuration) {
         // Random scrolls and mouse movements

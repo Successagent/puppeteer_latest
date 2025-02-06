@@ -1,0 +1,32 @@
+[
+  {
+    "name": "osano_consentmanager",
+    "value": "zyST69BE-DmnNwRlnKQPabY1MYenQ75fQL16134duz62F8Ly_GKMufFEE_0hwzYtUaW5AWG0onaaBnGen7n-hblePzQ8immrq3ormub1ZyHCgCUTaDjgLFyUuSgSWtkO7jQ0PY2vLtvonFYv2YH-W21JkcQD8XPP6gm9EcAzxQg1uAq8zxujvN3LLhW5YzeKG_618UOgww0xCCDrSRRhnMuuNK_CFt9bi2KrLVw-v6bwt-6HQz8B85R6O-fsRs_1cAa-BCOaJysDkPqN4d44pIo_2F2XJtY9ixjAzvsi9eGpB7JLUDvbctB7hv5lGSzw8tetjBQHG14=",
+    "domain": ".grammy.com",
+    "path": "/",
+    "expires": 1770236203.032527,
+    "size": 352,
+    "httpOnly": false,
+    "secure": true,
+    "session": false,
+    "sameSite": "Lax",
+    "priority": "Medium",
+    "sameParty": false,
+    "sourceScheme": "Secure"
+  },
+  {
+    "name": "osano_consentmanager_uuid",
+    "value": "2b85e312-a21e-42d9-83c6-2608622c2209",
+    "domain": ".grammy.com",
+    "path": "/",
+    "expires": 1770236203.03024,
+    "size": 61,
+    "httpOnly": false,
+    "secure": true,
+    "session": false,
+    "sameSite": "Lax",
+    "priority": "Medium",
+    "sameParty": false,
+    "sourceScheme": "Secure"
+  }
+]
