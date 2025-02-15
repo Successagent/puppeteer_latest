@@ -258,9 +258,8 @@ function sleep(ms) {
 }
 
 export const getFilteredLinks = async (page, keyword) => {
-  return await page.evaluate((keyword) => {
+  return await page.evaluate(() => {
     return Array.from(document.querySelectorAll("a")) // Select all links
-      .map((a) => a.href) // Extract href attributes
-      .filter((href) => href.includes(keyword)); // Filter by keyword
-  }, keyword);
+      .map((a) => a.href); // Extract href attributes
+  });
 };

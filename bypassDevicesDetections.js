@@ -21,34 +21,18 @@ export async function iphoneBypass(page, userAgent) {
       };
     })(WebGL2RenderingContext.prototype.getParameter);
 
-    // Navigator Spoofing
-    const modifyNavigator = (originalNavigator, device) => {
-      const override = {
-        plugins: originalNavigator.plugins,
-        platform: "iPhone",
-        vendor: "Apple Computer, Inc.",
-        userAgent: device,
-      };
-
-      const handler = {
-        get: function (target, prop) {
-          if (override.hasOwnProperty(prop)) {
-            return override[prop];
-          }
-          return Reflect.get(target, prop);
-        },
-      };
-
-      const proxyNavigator = new Proxy(originalNavigator, handler);
-      Object.defineProperty(globalThis, "navigator", {
-        value: proxyNavigator,
-        writable: false,
-        configurable: false,
-        enumerable: true,
-      });
+    // Helper function to override navigator properties safely
+    const overrideProperty = (object, property, value) => {
+      const descriptor = Object.getOwnPropertyDescriptor(object, property);
+      if (descriptor && descriptor.configurable) {
+        Object.defineProperty(object, property, { get: () => value });
+      }
     };
 
-    modifyNavigator(navigator, deviceUA);
+    // Override navigator properties safely
+    overrideProperty(Navigator.prototype, "platform", "iPhone");
+    overrideProperty(Navigator.prototype, "vendor", "Apple Computer, Inc.");
+    overrideProperty(Navigator.prototype, "userAgent", deviceUA);
   }, userAgent);
 }
 
@@ -126,3 +110,28 @@ export async function nuclearBypass(page, userAgent) {
     });
   });
 }
+
+export const cdpBypass = async (page) => {
+  // Apply anti-detection measures to every new page
+  await page.evaluateOnNewDocument(() => {
+    // Bypass DevTools detection
+    const originalQuery = window.navigator.permissions.query;
+    window.navigator.permissions.query = (parameters) =>
+      parameters.name === "devtools"
+        ? Promise.resolve({ state: "denied" })
+        : originalQuery(parameters);
+
+    // Disable console monitoring
+    const noop = () => {};
+    console.log = noop;
+    console.debug = noop;
+    console.warn = noop;
+    console.error = noop;
+    console.info = noop;
+
+    // Remove webdriver flag
+    if (navigator.webdriver !== false && navigator.webdriver !== undefined) {
+      delete Object.getPrototypeOf(navigator).webdriver;
+    }
+  });
+};

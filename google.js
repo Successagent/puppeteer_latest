@@ -5,6 +5,7 @@ import { delay } from "./delay.js";
 import { desktopRandomViewports } from "./viewports.js";
 import { saveCookies } from "./utils/cookies.js";
 import { interactWithPage } from "./actions.js";
+import { saveLocalStorage } from "./localStorageManager.js";
 
 function getRandomMobileViewport() {
   return desktopRandomViewports[
@@ -39,9 +40,9 @@ const randomViewport = getRandomMobileViewport();
       timeout: 200000,
     },
   });
-  await cluster.task(async ({ page, data: searchText }) => {
+  await cluster.task(async ({ page, data: url }) => {
     try {
-      await page.goto("https://www.grammy.com/", {
+      await page.goto(url, {
         waitUntil: "domcontentloaded",
       });
       // await page.waitForSelector("#APjFqb");
@@ -49,16 +50,20 @@ const randomViewport = getRandomMobileViewport();
       // await page.keyboard.press("Enter");
       // await page.waitForNavigation({ waitUntil: "networkidle2" });
       await saveCookies(page);
+      const newStorage = await page.evaluate(() =>
+        Object.assign({}, localStorage)
+      );
+      await saveLocalStorage(newStorage);
       console.log("Cookie Saved");
-      await interactWithPage(page, 40000);
+      await delay(40000);
       await delay(50000 + Math.random() * 50000);
     } catch (error) {
       console.log(error);
     }
   });
-  cluster.queue("Bianca");
-  cluster.queue("Grammy Award");
-  cluster.queue("Saas");
+  cluster.queue("https://hyss-neck.com/");
+  cluster.queue("https://www.exness.com/");
+  cluster.queue("https://www.grammy.com/");
 
   console.log("Shutting down...");
   await cluster.idle();

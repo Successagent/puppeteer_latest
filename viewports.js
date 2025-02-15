@@ -1,74 +1,19 @@
-export const mobileRandomViewports = [
-  {
-    width: 360,
-    height: 640,
-    deviceScaleFactor: 2,
-    isMobile: true,
-    hasTouch: true,
-  }, // Common Android
-  {
-    width: 375,
-    height: 812,
-    deviceScaleFactor: 3,
-    isMobile: true,
-    hasTouch: true,
-  }, // iPhone X/11 Pro
-  {
-    width: 414,
-    height: 896,
-    deviceScaleFactor: 2,
-    isMobile: true,
-    hasTouch: true,
-  }, // iPhone XR/11
-  {
-    width: 412,
-    height: 915,
-    deviceScaleFactor: 2.625,
-    isMobile: true,
-    hasTouch: true,
-  }, // Pixel 7
-  {
-    width: 390,
-    height: 844,
-    deviceScaleFactor: 3,
-    isMobile: true,
-    hasTouch: true,
-  }, // iPhone 12/13/14
-  {
-    width: 412,
-    height: 869,
-    deviceScaleFactor: 2.25,
-    isMobile: true,
-    hasTouch: true,
-  }, // Galaxy S20
-  {
-    width: 393,
-    height: 852,
-    deviceScaleFactor: 3,
-    isMobile: true,
-    hasTouch: true,
-  }, // iPhone 14 Pro
-  {
-    width: 430,
-    height: 932,
-    deviceScaleFactor: 3,
-    isMobile: true,
-    hasTouch: true,
-  }, // iPhone 14 Pro Max
-  {
-    width: 360,
-    height: 780,
-    deviceScaleFactor: 2.5,
-    isMobile: true,
-    hasTouch: true,
-  }, // Samsung Galaxy S22
-  {
-    width: 375,
-    height: 667,
-    deviceScaleFactor: 2,
-    isMobile: true,
-    hasTouch: true,
-  }, // iPhone SE (2nd Gen)
+export const mobileViewports = [
+  { width: 375, height: 667 }, // iPhone 6/7/8
+  { width: 414, height: 896 }, // iPhone XR/11
+  { width: 390, height: 844 }, // iPhone 12/13/14
+  { width: 412, height: 915 }, // Pixel 6/7
+  { width: 360, height: 740 }, // Samsung Galaxy S20
+  { width: 320, height: 568 }, // iPhone SE (1st gen)
+  { width: 360, height: 780 }, // Samsung Galaxy S22
+];
+
+export const tabletViewports = [
+  { width: 768, height: 1024 }, // iPad Mini
+  { width: 810, height: 1080 }, // iPad Air
+  { width: 834, height: 1194 }, // iPad Pro 11"
+  { width: 1280, height: 800 }, // Android Tablet (Samsung Tab)
+  { width: 1024, height: 1366 }, // iPad Pro 12.9"
 ];
 
 // Generate a random viewport size
