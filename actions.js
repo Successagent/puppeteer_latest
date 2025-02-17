@@ -263,3 +263,61 @@ export const getFilteredLinks = async (page, keyword) => {
       .map((a) => a.href); // Extract href attributes
   });
 };
+
+export async function interactWithPageInconcern(page, timeOnPage) {
+  function getRandomInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  try {
+    const maxHeight = await page.evaluate(() =>
+      document.documentElement ? document.documentElement.scrollHeight : 0
+    );
+    let currentHeight = 0;
+    const startTime = Date.now();
+    let currentMousePosition = { x: 0, y: 0 };
+
+    while (Date.now() - startTime < timeOnPage) {
+      const scrollLength = getRandomInt(100, 5000);
+      const direction = Math.random() < 0.5 ? -1 : 1;
+
+      currentHeight += scrollLength * direction;
+      currentHeight = Math.max(0, Math.min(currentHeight, maxHeight));
+
+      await page.evaluate((newHeight) => {
+        window.scrollTo(0, newHeight);
+      }, currentHeight);
+
+      const viewportWidth = await page.evaluate(() =>
+        document.documentElement ? document.documentElement.clientWidth : 0
+      );
+      const viewportHeight = await page.evaluate(() =>
+        document.documentElement ? document.documentElement.clientHeight : 0
+      );
+
+      const randomX = getRandomInt(0, viewportWidth);
+      const randomY = getRandomInt(0, viewportHeight);
+
+      const distanceX = (randomX - currentMousePosition.x) / 100;
+      const distanceY = (randomY - currentMousePosition.y) / 100;
+
+      for (let i = 0; i < 100; i++) {
+        const newX = currentMousePosition.x + distanceX * i;
+        const newY = currentMousePosition.y + distanceY * i;
+        await page.mouse.move(newX, newY);
+        await delay(10);
+      }
+
+      currentMousePosition = { x: randomX, y: randomY };
+      await delay(getRandomInt(500, 3000));
+    }
+  } catch (e) {
+    console.log("Error occurred:", e);
+    await delay(5000);
+    try {
+      await interactWithPageInconcern(page, timeOnPage);
+    } catch (retryError) {
+      console.log("Retry failed:", retryError);
+    }
+  }
+}
