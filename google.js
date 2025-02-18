@@ -6,6 +6,7 @@ import { desktopRandomViewports } from "./viewports.js";
 import { saveCookies } from "./utils/cookies.js";
 import { interactWithPage } from "./actions.js";
 import { saveLocalStorage } from "./localStorageManager.js";
+import proxyChain from "proxy-chain";
 
 function getRandomMobileViewport() {
   return desktopRandomViewports[
@@ -16,7 +17,11 @@ function getRandomMobileViewport() {
 const userAgent = new UserAgent({ deviceCategory: "desktop" });
 const randomViewport = getRandomMobileViewport();
 
+const oldProxyUrl =
+  "http://c08b36d53680241c3a7d__cr.gb:255aa2804471961b@gw.dataimpulse.com:823";
+
 (async () => {
+  const newProxyUrl = await proxyChain.anonymizeProxy(oldProxyUrl);
   const cluster = await Cluster.launch({
     concurrency: Cluster.CONCURRENCY_CONTEXT,
     maxConcurrency: 3,
@@ -35,6 +40,7 @@ const randomViewport = getRandomMobileViewport();
         "--disable-web-security",
         "--disable-features=site-per-process",
         "--font-render-hinting=none", // Reduce fingerprint variability
+        `--proxy-server=${newProxyUrl}`,
       ],
       defaultViewport: randomViewport,
       timeout: 200000,
