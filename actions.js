@@ -1,3 +1,4 @@
+import { androidBypass, iphoneBypass } from "./bypassDevicesDetections.js";
 import { delay } from "./delay.js";
 
 export const clickWithHumanLikeMovement = async (page, selector) => {
@@ -321,3 +322,24 @@ export async function interactWithPageInconcern(page, timeOnPage) {
     }
   }
 }
+
+export const setUserAgent = async (page, selectedUserAgent) => {
+  if (selectedUserAgent.userAgent.includes("Android")) {
+    await page.setUserAgent(selectedUserAgent.userAgent);
+    await page.setViewport({
+      width: selectedUserAgent.screenWidth,
+      height: selectedUserAgent.screenHeight,
+    });
+    await androidBypass(page);
+    console.log("Android");
+  }
+  if (selectedUserAgent.userAgent.includes("iPhone")) {
+    await page.setUserAgent(selectedUserAgent.userAgent);
+    await page.setViewport({
+      width: selectedUserAgent.screenWidth,
+      height: selectedUserAgent.screenHeight,
+    });
+    await iphoneBypass(page, selectedUserAgent.userAgent);
+    console.log("iPhone");
+  }
+};

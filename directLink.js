@@ -23,7 +23,7 @@ const MIN_WATCH_TIME = 0.3;
 const MAX_WATCH_TIME = 0.35;
 
 const faceAndroidUserAgent =
-  "Mozilla/5.0 (Android 13; Mobile; rv:122.0) Gecko/122.0 Firefox/122.0 [FBAN/FB4A;FBAV/452.0.0.41.109]";
+  "Mozilla/5.0 (Linux; Android 12; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 [FB_IAB/FB4A;FBAV/452.0.0.41.109;]";
 const iPhoneuserAgent =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/537.36 (KHTML, like Gecko) FxiOS/122.0 Mobile/15E148 Safari/537.36 [FBAN/FBIOS;FBAV/452.0.0.41.109]";
 const iPhoneFacebookuserAgent =

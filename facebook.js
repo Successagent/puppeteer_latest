@@ -7,30 +7,22 @@ import {
   iphoneBypass,
 } from "./bypassDevicesDetections.js";
 import { interactWithPage } from "./actions.js";
-import { mobileViewports } from "./viewports.js";
 import { Cluster } from "puppeteer-cluster";
-import UserAgent from "user-agents";
 import { androidDevices, iphoneDevices } from "./devices.js";
-import { loadCookies } from "./utils/cookies.js";
 import { delay } from "./delay.js";
 
-function getMobileViewport() {
-  return mobileViewports[Math.floor(Math.random() * mobileViewports.length)];
-}
+const devices = [...iphoneDevices, ...androidDevices];
+const randomDevice = devices[Math.floor(Math.random() * devices.length)];
 
-const mobileAgents = new UserAgent({ deviceCategory: "mobile" }).toString();
-const mobileView = getMobileViewport();
-
-console.log(mobileAgents);
+console.log(randomDevice.userAgent);
 
 const oldProxyUrl =
-  "http://c08b36d53680241c3a7d__cr.gb:255aa2804471961b@gw.dataimpulse.com:823";
+  "http://c08b36d53680241c3a7d__cr.us:255aa2804471961b@gw.dataimpulse.com:823";
 
 let index = 0;
 
 const MIN_WATCH_TIME = 0.3;
-const MAX_WATCH_TIME = 0.35;
-
+const MAX_WATCH_TIME = 0.5;
 puppeteer.use(StealthPlugin());
 (async () => {
   const newProxyUrl = await proxyChain.anonymizeProxy(oldProxyUrl);
@@ -56,11 +48,14 @@ puppeteer.use(StealthPlugin());
         "--disable-features=IsolateOrigins,site-per-process",
         // `--proxy-server=${newProxyUrl}`,
         // "--enable-unsafe-swiftshader",
-        `--user-agent=${mobileAgents}`,
+        `--user-agent=${randomDevice.userAgent}`,
       ],
-      defaultViewport: mobileView,
+      defaultViewport: {
+        width: randomDevice.screenWidth,
+        height: randomDevice.screenHeight,
+      },
     },
-    timeout: 110000,
+    timeout: 100000,
   });
 
   await cluster.on("taskerror", (err, data) => {
@@ -70,10 +65,10 @@ puppeteer.use(StealthPlugin());
   await cluster.task(async ({ page, data: url }) => {
     const newTabPromise = new Promise((resolve) => page.once("popup", resolve));
 
-    const SelectedIPhone =
-      iphoneDevices[Math.floor(Math.random() * iphoneDevices.length)];
+    const selectediPhone =
+      iphoneDevices[Math.floor(Math.random() * devices.length)];
     const selectedAndroid =
-      androidDevices[Math.floor(Math.random() * androidDevices.length)];
+      androidDevices[Math.floor(Math.random() * devices.length)];
 
     const watchDuration =
       MIN_WATCH_TIME * 60 * 1000 +
@@ -96,19 +91,26 @@ puppeteer.use(StealthPlugin());
     try {
       const userAgent = await page.evaluate(() => navigator.userAgent);
       if (userAgent.includes("Android")) {
-        await page.emulate(selectedAndroid);
+        await page.setUserAgent(selectedAndroid.userAgent);
+        await page.setViewport({
+          width: selectedAndroid.screenWidth,
+          height: selectedAndroid.screenHeight,
+        });
         await androidBypass(page);
         console.log("Android");
-      } else if (userAgent.includes("iPhone")) {
-        await page.emulate(SelectedIPhone);
-        await iphoneBypass(page, SelectedIPhone.userAgent);
+      }
+      if (userAgent.includes("iPhone")) {
+        await page.setUserAgent(selectediPhone.userAgent);
+        await page.setViewport({
+          width: selectediPhone.screenWidth,
+          height: selectediPhone.screenHeight,
+        });
+        await iphoneBypass(page, selectediPhone.userAgent);
         console.log("iPhone");
       }
-
       await page.goto(url, {
         waitUntil: "domcontentloaded",
       });
-      await loadCookies(page);
 
       await cdpBypass(page);
 
@@ -118,15 +120,14 @@ puppeteer.use(StealthPlugin());
       const contents = await iframesBanner.contentFrame();
       await contents.click("span");
 
-      await delay(5000);
-
       // Get the new tab from the popup event
       const newTab = await newTabPromise;
 
       // Switch to the new tab
-      // await newTab.bringToFront();
+      await newTab.bringToFront();
       await blockRequest(newTab);
-      await interactWithPage(newTab, watchDuration);
+      await delay(watchDuration / 2);
+      await interactWithPage(newTab, watchDuration / 2);
 
       console.log("Task completed " + index++);
       await newTab.close();
@@ -136,13 +137,16 @@ puppeteer.use(StealthPlugin());
   });
 
   // Create an array of 100 URLs and queue them
-  const urls = Array(50).fill(
-    // "https://video.solextrade.org/movies/moana-part-2"
-    "https://video.solextrade.org/movies/venom-last-dance"
-    // "https://video.solextrade.org/movies/invincible-season-3"
-    // "https://video.solextrade.org/movies/kraven-the-hunter"
+  const urls = Array(100).fill(
+    // "https://moviedownloadlinks.vercel.app/movies/moana-part-2"
+    // "https://www.whatsmyua.info/"
+    "https://moviedownloadlinks.vercel.app/movies/invincible-season-3"
+    // "https://moviedownloadlinks.vercel.app/movies/kraven-the-hunter"
+    // "https://moviedownloadlinks.vercel.app/movies/kraven-the-hunter"
   );
   urls.forEach((url) => cluster.queue(url));
+
+  // Shutdown after everything is done
 
   await cluster.idle();
   await cluster.close();
