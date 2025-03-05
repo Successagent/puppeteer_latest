@@ -128,7 +128,7 @@ puppeteer.use(StealthPlugin());
       const newTab = await newTabPromise;
 
       // Switch to the new tab
-      // await blockRequest(newTab);
+      await blockRequest(newTab);
       await delay(watchDuration / 2);
       await interactWithPage(newTab, watchDuration / 2);
 
