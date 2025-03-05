@@ -28,10 +28,10 @@ const mobileAgents = new UserAgent({ deviceCategory: "mobile" }).toString();
 //   "http://3f5873dabec0cf1a712b__cr.lt:6b30e2bd848ca264@gw.dataimpulse.com:823";
 // const oldProxyUrl =
 //   "http://3f5873dabec0cf1a712b__cr.lt:6b30e2bd848ca264@gw.dataimpulse.com:823";
-// const oldProxyUrl =
-//   "http://3f5873dabec0cf1a712b__cr.nl:6b30e2bd848ca264@gw.dataimpulse.com:823";
 const oldProxyUrl =
-  "http://3f5873dabec0cf1a712b__cr.lt,nl,ng,za,gb,us:6b30e2bd848ca264@gw.dataimpulse.com:823";
+  "http://3f5873dabec0cf1a712b__cr.za:6b30e2bd848ca264@gw.dataimpulse.com:823";
+// const oldProxyUrl =
+//   "http://3f5873dabec0cf1a712b__cr.lt,nl,ng,za,gb,us:6b30e2bd848ca264@gw.dataimpulse.com:823";
 
 let index = 0;
 
@@ -141,13 +141,13 @@ puppeteer.use(StealthPlugin());
 
   // Create an array of 100 URLs and queue them
   const urls = Array(30).fill(
-    // "https://moviedownloadlinks.vercel.app/movies/moana-part-2"
+    // "https://movieseriesdownload.online/movies/moana-part-2"
     // "https://oodruhoufouzair.com/4/9036596"
     // "https://oodruhoufouzair.com/4/9036596",
     // "https://oodruhoufouzair.com/4/9036596",
     // "https://oodruhoufouzair.com/4/9036596"
-    "https://moviedownloadlinks.vercel.app/movies/kraven-the-hunter"
-    // "https://moviedownloadlinks.vercel.app/movies/kraven-the-hunter"
+    "https://movieseriesdownload.online/movies/invincible-season-3"
+    // "https://movieseriesdownload.online/movies/gladiator-2"
   );
   urls.forEach((url) => cluster.queue(url));
 
