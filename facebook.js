@@ -6,18 +6,32 @@ import {
   cdpBypass,
   iphoneBypass,
 } from "./bypassDevicesDetections.js";
-import { interactWithPage } from "./actions.js";
+import { clickWithHumanLikeMovement, interactWithPage } from "./actions.js";
 import { Cluster } from "puppeteer-cluster";
 import { androidDevices, iphoneDevices } from "./devices.js";
 import { delay } from "./delay.js";
+import { mobileViewports } from "./viewports.js";
+import UserAgent from "user-agents";
 
-const devices = [...iphoneDevices, ...androidDevices];
-const randomDevice = devices[Math.floor(Math.random() * devices.length)];
+function getMobileViewport() {
+  return mobileViewports[Math.floor(Math.random() * mobileViewports.length)];
+}
 
-console.log(randomDevice.userAgent);
+const mobileViewport = getMobileViewport();
+const mobileAgents = new UserAgent({ deviceCategory: "mobile" }).toString();
 
+// const oldProxyUrl =
+//   "http://3f5873dabec0cf1a712b__cr.us:6b30e2bd848ca264@gw.dataimpulse.com:823";
+// const oldProxyUrl =
+//   "http://3f5873dabec0cf1a712b__cr.lt:6b30e2bd848ca264@gw.dataimpulse.com:823";
+// const oldProxyUrl =
+//   "http://3f5873dabec0cf1a712b__cr.lt:6b30e2bd848ca264@gw.dataimpulse.com:823";
+// const oldProxyUrl =
+//   "http://3f5873dabec0cf1a712b__cr.lt:6b30e2bd848ca264@gw.dataimpulse.com:823";
+// const oldProxyUrl =
+//   "http://3f5873dabec0cf1a712b__cr.nl:6b30e2bd848ca264@gw.dataimpulse.com:823";
 const oldProxyUrl =
-  "http://c08b36d53680241c3a7d__cr.us:255aa2804471961b@gw.dataimpulse.com:823";
+  "http://3f5873dabec0cf1a712b__cr.lt,nl,ng,za,gb,us:6b30e2bd848ca264@gw.dataimpulse.com:823";
 
 let index = 0;
 
@@ -46,13 +60,12 @@ puppeteer.use(StealthPlugin());
         "--enable-webgl",
         "--ignore-gpu-blocklist",
         "--disable-features=IsolateOrigins,site-per-process",
-        // `--proxy-server=${newProxyUrl}`,
-        // "--enable-unsafe-swiftshader",
-        `--user-agent=${randomDevice.userAgent}`,
+        `--proxy-server=${newProxyUrl}`,
+        `--user-agent=${mobileAgents}`,
       ],
       defaultViewport: {
-        width: randomDevice.screenWidth,
-        height: randomDevice.screenHeight,
+        width: mobileViewport.width,
+        height: mobileViewport.height,
       },
     },
     timeout: 100000,
@@ -65,10 +78,10 @@ puppeteer.use(StealthPlugin());
   await cluster.task(async ({ page, data: url }) => {
     const newTabPromise = new Promise((resolve) => page.once("popup", resolve));
 
-    const selectediPhone =
-      iphoneDevices[Math.floor(Math.random() * devices.length)];
-    const selectedAndroid =
-      androidDevices[Math.floor(Math.random() * devices.length)];
+    const SelectedIPhone =
+      iphoneDevices[Math.floor(Math.random() * iphoneDevices.length)];
+    const SelectedAndroid =
+      androidDevices[Math.floor(Math.random() * androidDevices.length)];
 
     const watchDuration =
       MIN_WATCH_TIME * 60 * 1000 +
@@ -91,21 +104,13 @@ puppeteer.use(StealthPlugin());
     try {
       const userAgent = await page.evaluate(() => navigator.userAgent);
       if (userAgent.includes("Android")) {
-        await page.setUserAgent(selectedAndroid.userAgent);
-        await page.setViewport({
-          width: selectedAndroid.screenWidth,
-          height: selectedAndroid.screenHeight,
-        });
+        await page.emulate(SelectedAndroid);
         await androidBypass(page);
         console.log("Android");
       }
       if (userAgent.includes("iPhone")) {
-        await page.setUserAgent(selectediPhone.userAgent);
-        await page.setViewport({
-          width: selectediPhone.screenWidth,
-          height: selectediPhone.screenHeight,
-        });
-        await iphoneBypass(page, selectediPhone.userAgent);
+        await page.emulate(SelectedIPhone);
+        await iphoneBypass(page, SelectedIPhone.userAgent);
         console.log("iPhone");
       }
       await page.goto(url, {
@@ -119,13 +124,11 @@ puppeteer.use(StealthPlugin());
       const iframesBanner = await page.$(selector);
       const contents = await iframesBanner.contentFrame();
       await contents.click("span");
-
       // Get the new tab from the popup event
       const newTab = await newTabPromise;
 
       // Switch to the new tab
-      await newTab.bringToFront();
-      await blockRequest(newTab);
+      // await blockRequest(newTab);
       await delay(watchDuration / 2);
       await interactWithPage(newTab, watchDuration / 2);
 
@@ -137,11 +140,13 @@ puppeteer.use(StealthPlugin());
   });
 
   // Create an array of 100 URLs and queue them
-  const urls = Array(100).fill(
+  const urls = Array(30).fill(
     // "https://moviedownloadlinks.vercel.app/movies/moana-part-2"
-    // "https://www.whatsmyua.info/"
-    "https://moviedownloadlinks.vercel.app/movies/invincible-season-3"
-    // "https://moviedownloadlinks.vercel.app/movies/kraven-the-hunter"
+    // "https://oodruhoufouzair.com/4/9036596"
+    // "https://oodruhoufouzair.com/4/9036596",
+    // "https://oodruhoufouzair.com/4/9036596",
+    // "https://oodruhoufouzair.com/4/9036596"
+    "https://moviedownloadlinks.vercel.app/movies/kraven-the-hunter"
     // "https://moviedownloadlinks.vercel.app/movies/kraven-the-hunter"
   );
   urls.forEach((url) => cluster.queue(url));
