@@ -1,23 +1,37 @@
 import puppeteer from "puppeteer";
-import { interactWithPage } from "./actions.js";
-
-const randomNumber = Math.floor(Math.random() * 3);
+import {
+  compareSelectedTeams,
+  getTopTenTeams,
+  goToBackAndGotoOver2GoalsSelection,
+  gotoTable,
+} from "./actions.js";
+// This script uses Puppeteer to scrape the top 10 teams that won their last match
 
 (async () => {
-  const browser = await puppeteer.launch({
-    headless: false,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
+  const browser = await puppeteer.launch({ headless: false });
   const page = await browser.newPage();
-  await page.goto("https://astromovies.vercel.app/movies/moana-part-2");
 
-  await interactWithPage(page, 30000);
-  const linkSelector = `#root > section > section > div.movie_section_img > ul > li:nth-child(${
-    randomNumber === 0 ? 1 : randomNumber
-  }) > a`;
-  await page.click(linkSelector);
+  // Navigate to the standings page
+  await page.goto("https://m.betking.com/virtual/league/kings-bundliga", {
+    waitUntil: "networkidle2",
+  });
 
-  await interactWithPage(page, 20000);
+  async function runPuppeteerScript() {
+    try {
+      console.log("Page loaded successfully");
+      let teamsWithLastWin = [];
+      let filteredMatches = [];
 
-  await browser.close();
+      await gotoTable(page);
+      await getTopTenTeams(page, teamsWithLastWin);
+      await goToBackAndGotoOver2GoalsSelection(page);
+      await compareSelectedTeams(page, filteredMatches);
+    } catch (error) {
+      console.error("Error running Puppeteer script:", error);
+    } finally {
+      setTimeout(runPuppeteerScript, 80 * 1000);
+    }
+  }
+
+  await runPuppeteerScript();
 })();

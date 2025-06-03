@@ -1,345 +1,189 @@
-import { androidBypass, iphoneBypass } from "./bypassDevicesDetections.js";
-import { delay } from "./delay.js";
+import fs from "fs";
 
-export const clickWithHumanLikeMovement = async (page, selector) => {
-  try {
-    // Find the element using the selector
-    const element = await page.$(selector);
-    if (!element) {
-      throw new Error(`Element not found for selector: ${selector}`);
-    }
+export const getTopTenTeams = async (page, teamsWithLastWin) => {
+  // Get all team name elements
+  const teamNameElements = await page.$$(".team-name");
+  // Get all last match result elements, skipping the first one (header)
+  const lastMatchResultElements = (await page.$$(".form")).slice(1);
 
-    // Get the bounding box of the element
-    const box = await element.boundingBox();
-    if (!box) {
-      throw new Error(
-        `Element bounding box not found for selector: ${selector}`
-      );
-    }
+  // Calculate minimum count to align data
+  const numItems = Math.min(
+    teamNameElements.length,
+    lastMatchResultElements.length
+  );
 
-    // Calculate a random point within the element
-    const x = box.x + Math.random() * box.width;
-    const y = box.y + Math.random() * box.height;
+  const results = [];
 
-    // Move mouse to the element's position with smooth movement
-    await page.mouse.move(x, y, { steps: 10 });
-    await delay(100 + Math.random() * 200); // Randomized delay
+  for (let i = 0; i < numItems; i++) {
+    const teamName = await teamNameElements[i].evaluate((el) =>
+      el.textContent.trim()
+    );
+    const lastChild = await lastMatchResultElements[i].evaluate((el) => {
+      const child = el.lastElementChild;
+      return child ? child.textContent.trim() : "";
+    });
 
-    // Perform a click action
-    await page.mouse.down();
-    await delay(50 + Math.random() * 100); // Slight delay before release
-    await page.mouse.up();
-
-    // Random delay to simulate human interaction
-    await delay(500 + Math.random() * 500);
-
-    // Handle potential navigation triggered by the click
-    const currentURL = page.url();
-    await Promise.race([
-      page
-        .waitForNavigation({ waitUntil: "networkidle0", timeout: 5000 })
-        .catch(() => {}),
-      delay(2000), // Fallback wait in case navigation doesn't happen
-    ]);
-
-    // Check if navigation occurred
-    if (page.url() !== currentURL) {
-      console.log("Navigation occurred.");
-    } else {
-      console.log("No navigation occurred.");
-    }
-  } catch (e) {
-    console.error(`Error clicking element: ${e.message}`);
+    results.push({
+      id: i + 1, // or start at 0 if you prefer
+      team: teamName,
+      value: lastChild,
+    });
   }
+
+  teamsWithLastWin = results.slice(0, 10).filter((team) => team.value === "W");
+  fs.writeFileSync(
+    "teamsWithLastWin.json",
+    JSON.stringify(teamsWithLastWin, null, 2)
+  );
+  await delay(3000);
 };
 
-const humanTyping = async (page, text, selector, mode = "medium") => {
-  try {
-    // Define typing speed ranges
-    const typingSpeeds = {
-      fast: [20, 80], // 20-80ms delay per keystroke
-      medium: [80, 150], // 80-150ms delay per keystroke
-      slow: [150, 250], // 150-250ms delay per keystroke
-    };
-    const [minSpeed, maxSpeed] = typingSpeeds[mode] || typingSpeeds["medium"];
+export const gotoTable = async (page) => {
+  const hamburger = ".view-switch-icon";
+  await page.waitForSelector(hamburger);
+  await page.click(hamburger);
 
-    // Find the input field using the selector
-    const inputElement = await page.$(selector);
-    if (!inputElement) {
-      throw new Error(`Element not found for selector: ${selector}`);
-    }
+  await delay(3000);
+  console.log("Table is now visible");
+};
 
-    // Focus on the input field before typing
-    await inputElement.focus();
+export const goToBackAndGotoOver2GoalsSelection = async (page) => {
+  const backButton = ".close-icon";
+  await page.waitForSelector(backButton);
+  await page.click(backButton);
 
-    // Function to generate a random integer between min and max
+  await delay(2000);
+  console.log("Navigated back");
 
-    // Type each character with a randomized delay
-    for (let char of text) {
-      await page.keyboard.type(char, {
-        delay: getRandomInt(minSpeed, maxSpeed),
+  const over2Market = '[data-testid="o/u-2.5-market"]';
+  await page.waitForSelector(over2Market);
+  await page.click(over2Market);
+
+  console.log("Over 2 Goals Market is now visible");
+  await delay(3000);
+};
+
+export const compareSelectedTeams = async (page, filteredMatches) => {
+  // Scrape the data
+  const results = await page.evaluate(() => {
+    // Adjust selectors below to match the website's structure
+    const games = document.querySelectorAll(".match"); // each game container
+    const data = [];
+
+    games.forEach((game) => {
+      const team1 = game.querySelector(".home-team").textContent.trim();
+      const team2 = game.querySelector(".away-team").textContent.trim();
+
+      // Over and under odds - adapt selectors to match actual markup
+      const overOdds =
+        game
+          .querySelectorAll('[data-testid="match-odd-value"]')[0]
+          ?.textContent.trim() || null;
+      const underOdds =
+        game
+          .querySelectorAll('[data-testid="match-odd-value"]')[1]
+          ?.textContent.trim() || null;
+
+      data.push({
+        matchup: `${team1} vs ${team2}`,
+        overOdds,
+        underOdds,
       });
-    }
-
-    // Optional: Add a final delay after typing to mimic natural behavior
-    await delay(getRandomInt(500, 1000));
-
-    console.log(`Successfully typed "${text}" into ${selector}`);
-  } catch (e) {
-    console.error(`Error typing text "${text}" into element "${selector}":`, e);
-  }
-};
-
-export const pickTypeMode = async (page, text, selector) => {
-  // Define available typing modes
-  const modes = ["fast", "medium", "slow"];
-
-  // Randomly select a typing mode
-  const selectedMode = modes[getRandomInt(0, modes.length - 1)];
-  console.log(`Selected typing mode: ${selectedMode}`);
-
-  // Call the humanTyping function with the selected mode
-  await humanTyping(page, text, selector, selectedMode);
-};
-
-export async function interactWithPage(page, timeOnPage) {
-  return new Promise(async (resolve) => {
-    let maxHeight = await page.evaluate(() =>
-      document.documentElement ? document.documentElement.scrollHeight : 0
-    );
-    let currentHeight = 0;
-    const startTime = Date.now();
-    let currentMousePosition = { x: 100, y: 100 }; // Start position
-
-    while (Date.now() - startTime < timeOnPage) {
-      // Scroll randomly
-      let scrollLength = getRandomInt(100, 5000);
-      let direction = Math.random() < 0.5 ? -1 : 1;
-      currentHeight += scrollLength * direction;
-      currentHeight = Math.max(0, Math.min(currentHeight, maxHeight));
-
-      await page.evaluate(
-        (newHeight) => window.scrollTo(0, newHeight),
-        currentHeight
-      );
-
-      let viewportWidth = await page.evaluate(() =>
-        document.documentElement ? document.documentElement.clientWidth : 0
-      );
-      let viewportHeight = await page.evaluate(() =>
-        document.documentElement ? document.documentElement.clientHeight : 0
-      );
-
-      // Choose a random movement pattern
-      let pattern = getRandomInt(1, 8);
-      await moveMouse(pattern, viewportWidth, viewportHeight, page);
-
-      let delay = getRandomInt(500, 3000);
-      await sleep(delay);
-
-      // Occasionally scroll up
-      if (Math.random() < 0.2) {
-        let scrollUpLength = getRandomInt(100, 500);
-        currentHeight = Math.max(0, currentHeight - scrollUpLength);
-        await page.evaluate(
-          (newHeight) => window.scrollTo(0, newHeight),
-          currentHeight
-        );
-      }
-    }
-    resolve();
-  });
-}
-
-async function moveMouse(pattern, viewportWidth, viewportHeight, page) {
-  switch (pattern) {
-    case 1: // Top to bottom
-      await smoothMouseMove(0, viewportHeight / 2, false, page);
-      break;
-    case 2: // Left to right
-      await smoothMouseMove(viewportWidth / 2, 0, false, page);
-      break;
-    case 3: // Diagonal
-      await smoothMouseMove(viewportWidth / 2, viewportHeight / 2, false, page);
-      break;
-    case 4: // Reverse diagonal
-      await smoothMouseMove(viewportWidth / 2, viewportHeight / 2, true, page);
-      break;
-    case 5: // Zigzag
-      await zigzagMouseMove(viewportWidth, viewportHeight, page);
-      break;
-    case 6: // Circular
-      await circularMouseMove(
-        viewportWidth / 2,
-        viewportHeight / 2,
-        Math.min(viewportWidth, viewportHeight) / 8,
-        page
-      );
-      break;
-    case 7: // Random walk
-      await randomWalk(viewportWidth, viewportHeight, page);
-      break;
-    case 8: // Spiral
-      await spiralMouseMove(
-        viewportWidth / 2,
-        viewportHeight / 2,
-        viewportWidth / 4,
-        page
-      );
-      break;
-  }
-}
-
-async function smoothMouseMove(targetX, targetY, reverse = false, page) {
-  let steps = 100;
-  let startX = 100;
-  let startY = 100;
-  for (let i = 0; i <= steps; i++) {
-    let progress = reverse ? (steps - i) / steps : i / steps;
-    let newX = startX + (targetX - startX) * progress;
-    let newY = startY + (targetY - startY) * progress;
-    await page.mouse.move(newX, newY);
-    await sleep(getRandomInt(5, 15));
-  }
-}
-
-async function zigzagMouseMove(viewportWidth, viewportHeight, page) {
-  let steps = 10;
-  let x = 100,
-    y = 100;
-  for (let i = 0; i < steps; i++) {
-    x += viewportWidth / steps;
-    y += (i % 2 === 0 ? 1 : -1) * (viewportHeight / steps);
-    await page.mouse.move(x, y);
-    await sleep(getRandomInt(5, 15));
-  }
-}
-
-async function circularMouseMove(centerX, centerY, radius, page) {
-  for (let i = 0; i < 360; i += 5) {
-    let angle = (i * Math.PI) / 180;
-    let newX = centerX + radius * Math.cos(angle);
-    let newY = centerY + radius * Math.sin(angle);
-    await page.mouse.move(newX, newY);
-    await sleep(getRandomInt(5, 15));
-  }
-}
-
-async function randomWalk(viewportWidth, viewportHeight, page) {
-  let x = getRandomInt(100, viewportWidth - 100);
-  let y = getRandomInt(100, viewportHeight - 100);
-  for (let i = 0; i < 20; i++) {
-    x += getRandomInt(-50, 50);
-    y += getRandomInt(-50, 50);
-    x = Math.max(0, Math.min(viewportWidth, x));
-    y = Math.max(0, Math.min(viewportHeight, y));
-    await page.mouse.move(x, y);
-    await sleep(getRandomInt(10, 30));
-  }
-}
-
-async function spiralMouseMove(centerX, centerY, maxRadius, page) {
-  let radiusStep = maxRadius / 100;
-  for (let i = 0; i <= 100; i++) {
-    let angle = (i * Math.PI * 4) / 100;
-    let radius = radiusStep * i;
-    let newX = centerX + radius * Math.cos(angle);
-    let newY = centerY + radius * Math.sin(angle);
-    await page.mouse.move(newX, newY);
-    await sleep(getRandomInt(5, 15));
-  }
-}
-
-function getRandomInt(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-export const getFilteredLinks = async (page, keyword) => {
-  return await page.evaluate(() => {
-    return Array.from(document.querySelectorAll("a")) // Select all links
-      .map((a) => a.href); // Extract href attributes
-  });
-};
-
-export async function interactWithPageInconcern(page, timeOnPage) {
-  function getRandomInt(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-  }
-
-  try {
-    const maxHeight = await page.evaluate(() =>
-      document.documentElement ? document.documentElement.scrollHeight : 0
-    );
-    let currentHeight = 0;
-    const startTime = Date.now();
-    let currentMousePosition = { x: 0, y: 0 };
-
-    while (Date.now() - startTime < timeOnPage) {
-      const scrollLength = getRandomInt(100, 5000);
-      const direction = Math.random() < 0.5 ? -1 : 1;
-
-      currentHeight += scrollLength * direction;
-      currentHeight = Math.max(0, Math.min(currentHeight, maxHeight));
-
-      await page.evaluate((newHeight) => {
-        window.scrollTo(0, newHeight);
-      }, currentHeight);
-
-      const viewportWidth = await page.evaluate(() =>
-        document.documentElement ? document.documentElement.clientWidth : 0
-      );
-      const viewportHeight = await page.evaluate(() =>
-        document.documentElement ? document.documentElement.clientHeight : 0
-      );
-
-      const randomX = getRandomInt(0, viewportWidth);
-      const randomY = getRandomInt(0, viewportHeight);
-
-      const distanceX = (randomX - currentMousePosition.x) / 100;
-      const distanceY = (randomY - currentMousePosition.y) / 100;
-
-      for (let i = 0; i < 100; i++) {
-        const newX = currentMousePosition.x + distanceX * i;
-        const newY = currentMousePosition.y + distanceY * i;
-        await page.mouse.move(newX, newY);
-        await delay(10);
-      }
-
-      currentMousePosition = { x: randomX, y: randomY };
-      await delay(getRandomInt(500, 3000));
-    }
-  } catch (e) {
-    console.log("Error occurred:", e);
-    await delay(5000);
-    try {
-      await interactWithPageInconcern(page, timeOnPage);
-    } catch (retryError) {
-      console.log("Retry failed:", retryError);
-    }
-  }
-}
-
-export const setUserAgent = async (page, selectedUserAgent) => {
-  if (selectedUserAgent.userAgent.includes("Android")) {
-    await page.setUserAgent(selectedUserAgent.userAgent);
-    await page.setViewport({
-      width: selectedUserAgent.screenWidth,
-      height: selectedUserAgent.screenHeight,
     });
-    await androidBypass(page);
-    console.log("Android");
-  }
-  if (selectedUserAgent.userAgent.includes("iPhone")) {
-    await page.setUserAgent(selectedUserAgent.userAgent);
-    await page.setViewport({
-      width: selectedUserAgent.screenWidth,
-      height: selectedUserAgent.screenHeight,
-    });
-    await iphoneBypass(page, selectedUserAgent.userAgent);
-    console.log("iPhone");
-  }
+
+    return data;
+  });
+
+  const teamsWithLastWin = JSON.parse(
+    fs.readFileSync("teamsWithLastWin.json", "utf-8")
+  );
+
+  // Create a flat array of team names
+  const teamList = teamsWithLastWin.map((obj) => obj.team);
+
+  filteredMatches = results.slice(0, 8).filter((game) => {
+    const [team1, team2] = game.matchup
+      .split(" vs ")
+      .map((team) => team.trim());
+    return teamList.includes(team1) || teamList.includes(team2);
+  });
+
+  fs.writeFileSync(
+    "filteredMatches.json",
+    JSON.stringify(filteredMatches, null, 2)
+  );
+  await delay(2000);
+  getOptionToStake(page);
 };
+
+const getOptionToStake = async (page) => {
+  const filteredMatches = JSON.parse(
+    fs.readFileSync("filteredMatches.json", "utf-8")
+  );
+
+  // Step 1: Find the lowest overOdds object
+  let lowestOddGame = filteredMatches.reduce((lowest, game) => {
+    const currentOverOdd = parseFloat(game.overOdds);
+    const lowestOverOdd = parseFloat(lowest.overOdds);
+    return currentOverOdd < lowestOverOdd ? game : lowest;
+  }, filteredMatches[0]);
+
+  // Step 2: Compare the lowest overOdd to 1 or 2
+  const lowestOverOddValue = parseFloat(lowestOddGame?.overOdds);
+
+  let result;
+  if (lowestOverOddValue <= 1 || lowestOverOddValue <= 2) {
+    result = lowestOddGame;
+  } else {
+    result = filteredMatches[0];
+  }
+
+  console.log(`Selected game to click: ${result.matchup}`);
+  fs.unlinkSync("filteredMatches.json");
+  fs.unlinkSync("teamsWithLastWin.json");
+
+  await delay(3500);
+
+  //   // Step 2: Click on the "over" option for that game
+  //   await page.evaluate((matchup) => {
+  //     const games = Array.from(document.querySelectorAll(".match")); // adjust selector
+
+  //     for (const game of games) {
+  //       const team1 = game.querySelector(".home-team").textContent.trim();
+  //       const team2 = game.querySelector(".away-team").textContent.trim();
+
+  //       if (`${team1} vs ${team2}` === matchup) {
+  //         const overButton = game.querySelector(
+  //           '[data-testid="match-odd-value"]'
+  //         )[0]; // adjust selector
+  //         if (overButton) {
+  //           overButton.click();
+  //           console.log(`Clicked on over for: ${matchup}`);
+  //         }
+  //         break;
+  //       }
+  //     }
+  //   }, result.matchup);
+};
+
+const calculationForFreshGame = (oddValue = 1.78) => {
+  // const lastMatchPlayed = "L";
+  const odd = oddValue - 1;
+  const totalBanlance = 300000;
+  const profitToMake = (totalBanlance / 100 / 10 / 2 / 2 / 3) * 2;
+  let totalAmountLost = profitToMake;
+  let stakeAmount = totalAmountLost / odd;
+  return stakeAmount;
+};
+const calculationForLostGames = (
+  oldOdd = 1.78,
+  newOdd = 1.55,
+  previousAmountStake
+) => {
+  let oddToStake = newOdd - 1;
+  let totalAmountLost = previousAmountStake * oldOdd;
+  let newStakeAmount = totalAmountLost / oddToStake;
+  return newStakeAmount;
+};
+
+export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
