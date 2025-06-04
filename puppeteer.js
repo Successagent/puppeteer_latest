@@ -1,10 +1,5 @@
 import puppeteer from "puppeteer";
-import {
-  compareSelectedTeams,
-  getTopTenTeams,
-  goToBackAndGotoOver2GoalsSelection,
-  gotoTable,
-} from "./actions.js";
+import { trackTimerValue } from "./actions.js";
 // This script uses Puppeteer to scrape the top 10 teams that won their last match
 
 (async () => {
@@ -21,15 +16,9 @@ import {
       console.log("Page loaded successfully");
       let teamsWithLastWin = [];
       let filteredMatches = [];
-
-      await gotoTable(page);
-      await getTopTenTeams(page, teamsWithLastWin);
-      await goToBackAndGotoOver2GoalsSelection(page);
-      await compareSelectedTeams(page, filteredMatches);
+      await trackTimerValue(page, teamsWithLastWin, filteredMatches, browser);
     } catch (error) {
       console.error("Error running Puppeteer script:", error);
-    } finally {
-      setTimeout(runPuppeteerScript, 80 * 1000);
     }
   }
 
