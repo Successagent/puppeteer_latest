@@ -2,7 +2,8 @@ import fs from "fs";
 import nodemailer from "nodemailer";
 
 export const getTopTenTeams = async (page, teamsWithLastWin) => {
-  await delay(3000);
+  const groupSelector = ".group-standing";
+  await page.waitForSelector(groupSelector);
   // Get all team name elements
   const teamNameElements = await page.$$(".team-name");
   // Get all last match result elements, skipping the first one (header)
@@ -139,15 +140,19 @@ const getOptionToStake = async (page) => {
   } else {
     result = filteredMatches[0];
   }
-  console.log(`Selected game to click: ${result.matchup}`);
+
+  console.log("Selected Matchup:", result.matchup);
+
   fs.unlinkSync("filteredMatches.json");
   fs.unlinkSync("teamsWithLastWin.json");
+  addNewMatch(result);
 
   // Step 3: Click on the selected game
 
   const [homeTeam, awayTeam] = result.matchup.split(" vs ");
 
   const matches = await page.$$(".match");
+  const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
   for (const match of matches.slice(0, 9)) {
     // Get the home and away team names from the match row
@@ -156,14 +161,85 @@ const getOptionToStake = async (page) => {
     if (matchText.includes(homeTeam) && matchText.includes(awayTeam)) {
       // Click the Over 2.5 button inside this match row
       const over2Button = await match.$('[data-testid="match-odd-value"]'); // Adjust selector
-      if (over2Button) {
-        await over2Button.click();
-        console.log("Clicked Over 2.5 for this match.");
-      } else {
-        console.log("Over 2.5 button not found.");
+      const headerHeight = 50; // Adjust to your header height
+
+      if (!(await over2Button.isIntersectingViewport())) {
+        await page.evaluate(
+          (element, offset) => {
+            const elementTop = element.getBoundingClientRect().top;
+            const scrollPosition = elementTop + window.pageYOffset - offset;
+            window.scrollTo(0, scrollPosition);
+          },
+          over2Button,
+          headerHeight
+        );
+
+        await delay(300);
       }
+
+      await over2Button.click();
     }
   }
+
+  const betSlipSelector =
+    "body > app-root > app-wrapper > app-nav-bar > div > app-nav-bar-items > div > div.nav-bar-item.middle.ng-star-inserted";
+  await Promise.all([
+    await delay(1000),
+    await page.waitForSelector(betSlipSelector, { visible: true }),
+    await page.click(betSlipSelector),
+    console.log("Betslip Clicked"),
+  ]);
+  let stakeAmount;
+  let lastGamePlayed = JSON.parse(fs.readFileSync("lastgame.json", "utf-8")); // Default to "W" if file doesn't exist or is empty
+  // Step 4: Go BetSlip Page
+
+  if (lastGamePlayed === "L") {
+    const previousGameData = loadData();
+    let previousGameOdds = previousGameData.last.overOdds;
+    let previousStakeAmount;
+    if (fs.existsSync("previousStakeAmount.json")) {
+      const data = fs.readFileSync("previousStakeAmount.json", "utf-8");
+      previousStakeAmount = JSON.parse(data);
+    }
+    // Step 5: Calculate the stake amount
+    const oddValue = parseFloat(result.overOdds);
+    stakeAmount = calculationForLostGames(
+      previousGameOdds,
+      oddValue,
+      previousStakeAmount
+    );
+    fs.writeFileSync(
+      "previousStakeAmount.json",
+      JSON.stringify(stakeAmount.toFixed(2), null, 2)
+    );
+  } else {
+    // Step 5: Calculate the stake amount
+    const oddValue = parseFloat(result.overOdds);
+    stakeAmount = calculationForFreshGame(oddValue);
+
+    fs.writeFileSync(
+      "previousStakeAmount.json",
+      JSON.stringify(stakeAmount.toFixed(2), null, 2)
+    );
+  }
+
+  // Put the stake amount in the input field
+  const stakeInputSelector = '[data-testid="coupon-totals-stake-amount-value"]';
+  const closeOdd = ".close-odd";
+  const closeBetSlip = '[data-testid="coupon-continue-betting"]';
+
+  await Promise.all([
+    await page.waitForSelector(stakeInputSelector, { visible: true }),
+    await page.focus(stakeInputSelector),
+    await page.click(stakeInputSelector, { clickCount: 5, delay: 300 }), // Clear the input
+    await page.type(stakeInputSelector, stakeAmount.toFixed(2)),
+
+    // Step 6: Place the bet
+    await page.waitForSelector(closeOdd),
+    await page.click(closeOdd, { delay: 200 }),
+    // Step 6: Place the bet
+    await page.click(closeBetSlip),
+  ]);
 };
 
 const calculationForFreshGame = (oddValue = 1.78) => {
@@ -186,15 +262,35 @@ const calculationForLostGames = (
   return newStakeAmount;
 };
 
+const navigateTabs = async (page, text) => {
+  await page.waitForSelector('[data-testid="results-page-tab-standings"]'); // Wait for tabs to load
+
+  await page.evaluate((title) => {
+    const tabs = Array.from(
+      document.querySelectorAll('[data-testid="results-page-tab-standings"]')
+    );
+    const resultsTab = tabs.find((tab) => tab.textContent.trim() === title);
+    if (resultsTab) {
+      resultsTab.click();
+    }
+  }, text);
+  console.log(`Navigated to ${text} Page`);
+  await delay(1500);
+};
+
 export async function trackTimerValue(
-  page,
   teamsWithLastWin,
   filteredMatches,
+  page,
   browser,
-  lastGamePlayed = "W"
+  gamesPlayed
 ) {
   while (true) {
     try {
+      let lastGamePlayed = JSON.parse(
+        fs.readFileSync("lastgame.json", "utf-8")
+      );
+
       const elementHandle = await page.$(".countdown-timer");
       // If the element is not found, it might be hidden or not yet rendered
 
@@ -203,8 +299,8 @@ export async function trackTimerValue(
           (el) => el.textContent.trim(),
           elementHandle
         );
-
-        if (timerValue === "00:50") {
+        let secondsLeft = parseInt(timerValue.split(":")[1], 10);
+        if (secondsLeft === 50) {
           const elementText = await page.$eval(".week", (el) => el.textContent);
           const match = elementText.match(/\d+/); // Extracts the first sequence of digits
           const number = match ? parseInt(match[0], 10) : null;
@@ -236,10 +332,23 @@ export async function trackTimerValue(
             await page.close(); // Closes the current page
             browser.close(); // Stop the script if week is less than 8
           } else {
-            await gotoTable(page);
-            await getTopTenTeams(page, teamsWithLastWin);
-            await goToBackAndGotoOver2GoalsSelection(page);
-            await compareSelectedTeams(page, filteredMatches);
+            if (gamesPlayed > 0) {
+              gotoResults(page);
+              await delay(4000);
+              navigateTabs(page, "Standings");
+              await delay(2000);
+              await getTopTenTeams(page, teamsWithLastWin);
+              await goToBackAndGotoOver2GoalsSelection(page);
+              await compareSelectedTeams(page, filteredMatches);
+              console.log("Checking last game played...");
+            } else {
+              await gotoTable(page);
+              await getTopTenTeams(page, teamsWithLastWin);
+              await goToBackAndGotoOver2GoalsSelection(page);
+              await compareSelectedTeams(page, filteredMatches);
+            }
+            gamesPlayed++;
+            console.log(`Games played: ${gamesPlayed}`);
           }
         }
       } else {
@@ -256,3 +365,109 @@ export async function trackTimerValue(
 }
 
 export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+let filePath = "data.json";
+function loadData() {
+  if (fs.existsSync(filePath)) {
+    const content = fs.readFileSync(filePath, "utf-8");
+    return JSON.parse(content);
+  }
+  return { last: null, recent: null };
+}
+
+// Save the updated two
+function saveData(data) {
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+}
+
+// Add a new object
+function addNewMatch(newMatch) {
+  const data = loadData();
+  data.last = data.recent;
+  data.recent = newMatch;
+  saveData(data);
+}
+
+export const gotoResults = async (page) => {
+  // Navigate to the results page
+  gotoTable(page);
+
+  navigateTabs(page, "Results");
+
+  getFullTimeScore(page);
+};
+
+const getFullTimeScore = async (page) => {
+  // Load last match data
+  const data = loadData();
+  const lastMatch = data.recent.matchup;
+  const [lastHomeTeam, lastAwayTeam] = lastMatch
+    .split(" vs ")
+    .map((s) => s.trim());
+
+  console.log(lastHomeTeam, lastAwayTeam);
+
+  await page.waitForSelector("mvs-tournament-results");
+
+  const results = await page.$$eval(
+    "mvs-tournament-results .row.ng-star-inserted",
+    (rows) => {
+      return rows.slice(0, 9).map((row) => {
+        const index = row
+          .querySelector('[data-testid="results-index"]')
+          ?.textContent.trim();
+        const homeTeam = row
+          .querySelector('[data-testid="results-home-team"]')
+          ?.textContent.trim();
+        const awayTeam = row
+          .querySelector('[data-testid="results-away-team"]')
+          ?.textContent.trim();
+        const halfTime = row
+          .querySelector('[data-testid="results-ht"]')
+          ?.textContent.trim();
+        const fullTime = row
+          .querySelector('[data-testid="results-ft"]')
+          ?.textContent.trim();
+        return {
+          index,
+          homeTeam,
+          awayTeam,
+          halfTime,
+          fullTime,
+        };
+      });
+    }
+  );
+
+  const filteredMatches = results.find((match) => {
+    return match.homeTeam === lastHomeTeam && match.awayTeam === lastAwayTeam;
+  });
+
+  const fullTimeScore = filteredMatches ? filteredMatches.fullTime : null;
+
+  console.log(fullTimeScore);
+
+  if (fullTimeScore) {
+    console.log(`Full-time score ${fullTimeScore}`);
+    const [homeScore, awayScore] = fullTimeScore.split("-").map(Number);
+
+    let lastGamePlayed = "W"; // Default to Win
+    let score = 0;
+    if (homeScore === 0) {
+      score = awayScore;
+    } else {
+      score = homeScore + awayScore;
+    }
+    console.log(score);
+
+    if (score >= 3) {
+      lastGamePlayed = "W"; // Win if score >= 3
+    } else {
+      lastGamePlayed = "L"; // Loss if score < 3
+    }
+    console.log(`Last game played: ${lastGamePlayed}`);
+    fs.writeFileSync("lastgame.json", JSON.stringify(lastGamePlayed, null, 2));
+  } else {
+    console.log("No match found for the last game played.");
+  }
+};
