@@ -167,14 +167,14 @@ const getOptionToStake = async (page) => {
         await page.evaluate(
           (element, offset) => {
             const elementTop = element.getBoundingClientRect().top;
-            const scrollPosition = elementTop + window.pageYOffset - offset;
+            const scrollPosition = elementTop + window.pageYOffset + offset;
             window.scrollTo(0, scrollPosition);
           },
           over2Button,
           headerHeight
         );
 
-        await delay(300);
+        await delay(3000);
       }
 
       await over2Button.click();
@@ -303,8 +303,10 @@ export async function trackTimerValue(
         if (secondsLeft === 50) {
           const elementText = await page.$eval(".week", (el) => el.textContent);
           const match = elementText.match(/\d+/); // Extracts the first sequence of digits
-          const number = match ? parseInt(match[0], 10) : null;
-          if (34 - 1 < 8 && lastGamePlayed === "W") {
+          const currentWeek = match ? parseInt(match[0], 10) : null;
+          const weeksLeft = 34 - currentWeek;
+
+          if (weeksLeft === 7 && lastGamePlayed === "W") {
             console.log("Week is less than 8, stopping the script.");
             const transport = nodemailer.createTransport({
               host: "smtp.hostinger.com",
@@ -320,7 +322,7 @@ export async function trackTimerValue(
               from: "support@movieseriesdownload.online",
               to: "miesineagent@gmail.com",
               subject: "Trade Stopped",
-              html: `<p>Week is less than 8, stopping the script.</p><p>Current week: ${number}</p>`,
+              html: `<p>Week is less than 8, stopping the script.</p><p>Current week: ${week} and waiting to start at week 2</p>`,
             };
             transport.sendMail(adminMailOptions, (error, info) => {
               if (error) {
@@ -329,20 +331,19 @@ export async function trackTimerValue(
                 console.log("Admin email sent: " + info.response);
               }
             });
-            await page.close(); // Closes the current page
-            browser.close(); // Stop the script if week is less than 8
-          } else {
+          } else if (week >= 2 && weeksLeft > 7) {
             if (gamesPlayed > 0) {
               gotoResults(page);
               await delay(4000);
               navigateTabs(page, "Standings");
-              await delay(2000);
+              await delay(3000);
               await getTopTenTeams(page, teamsWithLastWin);
               await goToBackAndGotoOver2GoalsSelection(page);
               await compareSelectedTeams(page, filteredMatches);
               console.log("Checking last game played...");
             } else {
               await gotoTable(page);
+              await delay(4000);
               await getTopTenTeams(page, teamsWithLastWin);
               await goToBackAndGotoOver2GoalsSelection(page);
               await compareSelectedTeams(page, filteredMatches);

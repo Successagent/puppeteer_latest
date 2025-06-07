@@ -28,7 +28,7 @@ import { trackTimerValue } from "./actions.js";
   // Navigate to the standings page
   await page.goto("https://m.betking.com/virtual/league/kings-bundliga", {
     waitUntil: "networkidle2",
-    timeout: 50000,
+    timeout: 130000,
   });
 
   async function runPuppeteerScript() {
