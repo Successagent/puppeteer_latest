@@ -335,7 +335,9 @@ export async function trackTimerValue(
               subject: "Trade Stopped",
               html: `<p>Week is less than 8, stopping the script.</p><p>Current week: ${currentWeek} and waiting to start at week 2. Games Played: ${
                 resultArray.length
-              }, Total Won: ${getAllW()}, Total Loss: ${getAllL()} </p>`,
+              }, Here are the latest results:\n\n${resultArray.join(
+                ", "
+              )} Total Won: ${getAllW()}, Total Loss: ${getAllL()} </p>`,
             };
             transport.sendMail(adminMailOptions, (error, info) => {
               if (error) {
