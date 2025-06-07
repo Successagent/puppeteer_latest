@@ -161,20 +161,32 @@ const getOptionToStake = async (page) => {
     if (matchText.includes(homeTeam) && matchText.includes(awayTeam)) {
       // Click the Over 2.5 button inside this match row
       const over2Button = await match.$('[data-testid="match-odd-value"]'); // Adjust selector
-      const headerHeight = 50; // Adjust to your header height
+      const footerHeight = 50; // Adjust to your header height
 
-      if (!(await over2Button.isIntersectingViewport())) {
+      // Check if button is covered by fixed element
+      const isButtonCovered = await page.evaluate(
+        (button, footerHeight) => {
+          const buttonRect = button.getBoundingClientRect();
+          const viewportHeight = window.innerHeight;
+          return buttonRect.bottom > viewportHeight - footerHeight;
+        },
+        over2Button,
+        footerHeight
+      );
+
+      if (!(await over2Button.isIntersectingViewport()) || isButtonCovered) {
         await page.evaluate(
           (element, offset) => {
             const elementTop = element.getBoundingClientRect().top;
-            const scrollPosition = elementTop + window.pageYOffset + offset;
+            const scrollPosition =
+              elementTop + window.pageYOffset - offset - 300;
             window.scrollTo(0, scrollPosition);
           },
           over2Button,
-          headerHeight
+          footerHeight
         );
 
-        await delay(3000);
+        await delay(1500);
       }
 
       await over2Button.click();
@@ -282,7 +294,6 @@ export async function trackTimerValue(
   teamsWithLastWin,
   filteredMatches,
   page,
-  browser,
   gamesPlayed
 ) {
   while (true) {
@@ -306,7 +317,7 @@ export async function trackTimerValue(
           const currentWeek = match ? parseInt(match[0], 10) : null;
           const weeksLeft = 34 - currentWeek;
 
-          if (weeksLeft === 7 && lastGamePlayed === "W") {
+          if (weeksLeft <= 7 && lastGamePlayed === "W") {
             console.log("Week is less than 8, stopping the script.");
             const transport = nodemailer.createTransport({
               host: "smtp.hostinger.com",
@@ -322,7 +333,9 @@ export async function trackTimerValue(
               from: "support@movieseriesdownload.online",
               to: "miesineagent@gmail.com",
               subject: "Trade Stopped",
-              html: `<p>Week is less than 8, stopping the script.</p><p>Current week: ${week} and waiting to start at week 2</p>`,
+              html: `<p>Week is less than 8, stopping the script.</p><p>Current week: ${currentWeek} and waiting to start at week 2. Games Played: ${
+                resultArray.length
+              }, Total Won: ${getAllW()}, Total Loss: ${getAllL()} </p>`,
             };
             transport.sendMail(adminMailOptions, (error, info) => {
               if (error) {
@@ -331,23 +344,20 @@ export async function trackTimerValue(
                 console.log("Admin email sent: " + info.response);
               }
             });
-          } else if (week >= 2 && weeksLeft > 7) {
-            if (gamesPlayed > 0) {
-              gotoResults(page);
-              await delay(4000);
-              navigateTabs(page, "Standings");
-              await delay(3000);
-              await getTopTenTeams(page, teamsWithLastWin);
-              await goToBackAndGotoOver2GoalsSelection(page);
-              await compareSelectedTeams(page, filteredMatches);
-              console.log("Checking last game played...");
-            } else {
-              await gotoTable(page);
-              await delay(4000);
-              await getTopTenTeams(page, teamsWithLastWin);
-              await goToBackAndGotoOver2GoalsSelection(page);
-              await compareSelectedTeams(page, filteredMatches);
-            }
+          } else if (lastGamePlayed === "L" && weeksLeft <= 7) {
+            await CheckAndPlaySelectedOption(
+              page,
+              gamesPlayed,
+              teamsWithLastWin,
+              filteredMatches
+            );
+          } else if (currentWeek >= 2 && weeksLeft >= 7) {
+            await CheckAndPlaySelectedOption(
+              page,
+              gamesPlayed,
+              teamsWithLastWin,
+              filteredMatches
+            );
             gamesPlayed++;
             console.log(`Games played: ${gamesPlayed}`);
           }
@@ -467,8 +477,50 @@ const getFullTimeScore = async (page) => {
       lastGamePlayed = "L"; // Loss if score < 3
     }
     console.log(`Last game played: ${lastGamePlayed}`);
+    handleNewValue(lastGamePlayed);
+    console.log(`Total Wins: ${getAllW()}, Total Losses: ${getAllL()}`);
     fs.writeFileSync("lastgame.json", JSON.stringify(lastGamePlayed, null, 2));
   } else {
     console.log("No match found for the last game played.");
+  }
+};
+
+const resultArray = []; // Store W and L
+
+// Imagine this function runs every minute with the new value
+function handleNewValue(newValue) {
+  resultArray.push(newValue);
+}
+
+// Filter later
+function getAllW() {
+  return resultArray.filter((item) => item === "W").length;
+}
+
+function getAllL() {
+  return resultArray.filter((item) => item === "L").length;
+}
+
+const CheckAndPlaySelectedOption = async (
+  page,
+  gamesPlayed,
+  teamsWithLastWin,
+  filteredMatches
+) => {
+  if (gamesPlayed > 0) {
+    gotoResults(page);
+    await delay(6000);
+    navigateTabs(page, "Standings");
+    await delay(5000);
+    await getTopTenTeams(page, teamsWithLastWin);
+    await goToBackAndGotoOver2GoalsSelection(page);
+    await compareSelectedTeams(page, filteredMatches);
+    console.log("Checking last game played...");
+  } else {
+    await gotoTable(page);
+    await delay(4000);
+    await getTopTenTeams(page, teamsWithLastWin);
+    await goToBackAndGotoOver2GoalsSelection(page);
+    await compareSelectedTeams(page, filteredMatches);
   }
 };

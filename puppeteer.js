@@ -42,7 +42,6 @@ import { trackTimerValue } from "./actions.js";
         teamsWithLastWin,
         filteredMatches,
         page,
-        browser,
         gamesPlayed
       );
     } catch (error) {
