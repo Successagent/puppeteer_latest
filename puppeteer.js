@@ -37,6 +37,7 @@ import { trackTimerValue } from "./actions.js";
       let teamsWithLastWin = [];
       let filteredMatches = [];
       let gamesPlayed = 0;
+      let isMailed = false;
 
       await trackTimerValue(
         teamsWithLastWin,
