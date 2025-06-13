@@ -398,6 +398,7 @@ const getOptionToStake = async (page, goalOdd) => {
     continueButton
   );
   if (buttonText.includes("Continue Betting")) {
+    await delay(4500);
     await continueButton.click();
     console.log('Clicked "Continue Betting" button');
   } else {
