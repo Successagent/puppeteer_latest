@@ -123,7 +123,6 @@ async function analyzeMatches(page) {
 
   // 4. Click elements using better element handling
   console.log(`Found ${matchesToClick.length} relevant matches:`);
-  const allOdds = await page.$$('mvs-match mvs-odd[data-testid="match-odd"]');
 
   for (const match of matchesToClick) {
     try {
@@ -136,45 +135,73 @@ async function analyzeMatches(page) {
         overOdds: match.oddsValue,
       });
 
-      // More reliable clicking using page.$$ selector
-      const index = 0;
-      if (allOdds[index]) {
-        const footerHeight = 50; // Adjust to your header height
+      const [home, away] = match.match.split(" vs ");
 
-        // Check if button is covered by fixed element
-        const isButtonCovered = await page.evaluate(
-          (button, footerHeight) => {
-            const buttonRect = button.getBoundingClientRect();
-            const viewportHeight = window.innerHeight;
-            return buttonRect.bottom > viewportHeight - footerHeight;
-          },
-          allOdds[index],
-          footerHeight
+      // Wait for matches to load
+      await page.waitForSelector('[data-testid="match-content"]');
+
+      // Find all match elements
+      const matches = await page.$$('[data-testid="match-content"]');
+
+      // Find the specific match (BMU vs LEV)
+      for (const match of matches.slice(0, 9)) {
+        const homeTeam = await match.$eval(
+          '[data-testid="match-home-team"]',
+          (el) => el.textContent.trim()
+        );
+        const awayTeam = await match.$eval(
+          '[data-testid="away-home-team"]',
+          (el) => el.textContent.trim()
         );
 
         if (
-          !(await allOdds[index]?.isIntersectingViewport()) ||
-          isButtonCovered
+          (homeTeam.includes(home) && awayTeam.includes(away)) ||
+          (homeTeam.includes(away) && awayTeam.includes(home))
         ) {
-          await page.evaluate(
-            (element, offset) => {
-              const elementTop = element.getBoundingClientRect().top;
-              const scrollPosition =
-                elementTop + window.pageYOffset - offset - 300;
-              window.scrollTo(0, scrollPosition);
-            },
-            allOdds[index],
-            footerHeight
-          );
-        }
+          console.log(`Found match: ${homeTeam} vs ${awayTeam}`);
 
-        await allOdds[0].click();
-        await delay(1500); // Longer delay for stability
-        console.log("Successfully clicked");
-        await getOptionToStake(page, match?.oddsValue);
-      } else {
-        console.log("Element not found for this match");
+          // Find the Over 2.5 option (first odd in the pair)
+          const overOdd = await match.$('[data-testid="match-odd-value"]');
+
+          if (overOdd) {
+            console.log("Clicked on Over 2.5 option");
+            const footerHeight = 50; // Adjust to your header height
+            // Check if button is covered by fixed element
+            const isButtonCovered = await page.evaluate(
+              (button, footerHeight) => {
+                const buttonRect = button.getBoundingClientRect();
+                const viewportHeight = window.innerHeight;
+                return buttonRect.bottom > viewportHeight - footerHeight;
+              },
+              overOdd,
+              footerHeight
+            );
+
+            if (!(await overOdd.isIntersectingViewport()) || isButtonCovered) {
+              await page.evaluate(
+                (element, offset) => {
+                  const elementTop = element.getBoundingClientRect().top;
+                  const scrollPosition =
+                    elementTop + window.pageYOffset - offset - 350;
+                  window.scrollTo(0, scrollPosition);
+                },
+                overOdd,
+                footerHeight
+              );
+            }
+            await overOdd.click();
+            await delay(1500); // Longer delay for stability
+            console.log("Successfully clicked");
+            // Wait for bet slip or confirmation
+          } else {
+            console.log("Over 2.5 option not found");
+          }
+
+          break; // Exit loop after finding our match
+        }
       }
+
+      await getOptionToStake(page, match?.oddsValue);
     } catch (clickError) {
       console.error("Click failed:", clickError);
     }
@@ -238,7 +265,7 @@ export const goToBackAndGotoGoalGoalOption = async (page) => {
   await delay(1000);
   console.log("Navigated back");
 
-  const over2Market = '[data-testid="gg/ng-market"]';
+  const over2Market = '[data-testid="o/u-2.5-market"]';
   await page.waitForSelector(over2Market);
   await page.click(over2Market);
 
@@ -322,6 +349,8 @@ const getOptionToStake = async (page, goalOdd) => {
     }
     // Step 5: Calculate the stake amount
     const oddValue = parseFloat(goalOdd);
+    console.log(goalOdd);
+
     stakeAmount = calculationForLostGames(
       previousGameOdds,
       oddValue,
@@ -333,7 +362,7 @@ const getOptionToStake = async (page, goalOdd) => {
     );
   } else {
     // Step 5: Calculate the stake amount
-    const oddValue = parseFloat(result.overOdds);
+    const oddValue = parseFloat(goalOdd);
     stakeAmount = calculationForFreshGame(oddValue);
 
     fs.writeFileSync(
@@ -343,29 +372,43 @@ const getOptionToStake = async (page, goalOdd) => {
   }
 
   // Put the stake amount in the input field
-  // const stakeInputSelector = '[data-testid="coupon-totals-stake-amount-value"]';
-  // const closeOdd = ".close-odd";
-  // const closeBetSlip = '[data-testid="coupon-continue-betting"]';
+  const stakeInputSelector = '[data-testid="coupon-totals-stake-amount-value"]';
+  const closeOdd = '[data-testid="coupon-place-bet-btn"]';
 
-  // await Promise.all([
-  //   await page.waitForSelector(stakeInputSelector, { visible: true }),
-  //   await page.focus(stakeInputSelector),
-  //   await page.click(stakeInputSelector, { clickCount: 5, delay: 300 }), // Clear the input
-  //   await page.type(stakeInputSelector, stakeAmount.toFixed(2)),
+  await Promise.all([
+    await page.waitForSelector(stakeInputSelector, { visible: true }),
+    await page.focus(stakeInputSelector),
+    await page.click(stakeInputSelector, { clickCount: 5, delay: 300 }), // Clear the input
+    await page.type(stakeInputSelector, stakeAmount.toFixed(2)),
 
-  //   // Step 6: Place the bet
-  //   await page.waitForSelector(closeOdd),
-  //   await page.click(closeOdd, { delay: 200 }),
-  //   // Step 6: Place the bet
-  //   await page.click(closeBetSlip),
-  // ]);
+    // Step 6: Place the bet
+    await page.waitForSelector(closeOdd),
+    await page.click(closeOdd, { delay: 200 }),
+  ]);
+
+  await delay(2000);
+  // Step 6: Place the bet
+  const continueButton = await page.waitForSelector("span.btn-text", {
+    visible: true,
+    timeout: 5000,
+  });
+
+  const buttonText = await page.evaluate(
+    (button) => button.textContent,
+    continueButton
+  );
+  if (buttonText.includes("Continue Betting")) {
+    await continueButton.click();
+    console.log('Clicked "Continue Betting" button');
+  } else {
+    console.log("Button with correct text not found");
+  }
 };
 
 const calculationForFreshGame = (oddValue = 1.78) => {
   // const lastMatchPlayed = "L";
   const odd = oddValue - 1;
-  const totalBanlance = 300000;
-  const profitToMake = (totalBanlance / 100 / 10 / 2 / 2 / 3) * 2;
+  const profitToMake = 200;
   let totalAmountLost = profitToMake;
   let stakeAmount = totalAmountLost / odd;
   return stakeAmount;
@@ -569,9 +612,19 @@ function getAllL() {
   return resultArray.filter((item) => item === "L").length;
 }
 
-const CheckAndPlaySelectedOption = async (page) => {
-  await analyzeMatches(page);
-  await delay(4000);
+const CheckAndPlaySelectedOption = async (page, gamesPlayed) => {
+  if (gamesPlayed === 0) {
+    await analyzeMatches(page);
+    await delay(4000);
+  } else {
+    gotoResults(page);
+    await delay(4000);
+    const backButton = ".close-icon";
+    await page.waitForSelector(backButton);
+    await page.click(backButton);
+    await analyzeMatches(page);
+    await delay(4000);
+  }
 };
 
 const sendMailNotification = (currentWeek) => {

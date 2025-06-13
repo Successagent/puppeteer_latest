@@ -14,7 +14,10 @@ import { trackTimerValue } from "./actions.js";
 // This script uses Puppeteer to scrape the top 10 teams that won their last match
 
 (async () => {
-  const browser = await puppeteer.launch({ headless: false });
+  const browser = await puppeteer.launch({
+    headless: false,
+    userDataDir: "./user_data",
+  });
   const page = await browser.newPage();
 
   // Set a random user agent for the page
@@ -37,7 +40,6 @@ import { trackTimerValue } from "./actions.js";
       let teamsWithLastWin = [];
       let filteredMatches = [];
       let gamesPlayed = 0;
-      let isMailed = false;
 
       await trackTimerValue(
         teamsWithLastWin,
