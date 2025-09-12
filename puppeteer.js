@@ -16,7 +16,7 @@ import { trackTimerValue } from "./actions.js";
 (async () => {
   const browser = await puppeteer.launch({
     headless: false,
-    userDataDir: "./user_data",
+    // userDataDir: "./user_data",
   });
   const page = await browser.newPage();
 

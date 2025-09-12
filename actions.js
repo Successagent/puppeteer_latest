@@ -2,251 +2,85 @@ import fs from "fs";
 import nodemailer from "nodemailer";
 
 async function analyzeMatches(page) {
-  await gotoTable(page);
-  await delay(4000);
+  const matches = await page.$$(".teams"); // Get first 9 matches
 
-  // 1. Get standings data
-  await page.waitForSelector("mvs-standings-table");
+  // 1. Look for BMU matches and play Over 2.5
 
-  const { topTierTeams, secondTierTeams } = await page.evaluate(() => {
-    const teams = [];
-    const teamRows = document.querySelectorAll(
-      "div.team-names > div.row.ng-star-inserted"
+  for (let match of matches.slice(0, 9)) {
+    const home = await match.$eval('[data-testid="match-home-team"]', (el) =>
+      el.textContent.trim()
+    );
+    const away = await match.$eval('[data-testid="away-home-team"]', (el) =>
+      el.textContent.trim()
     );
 
-    teamRows.forEach((row) => {
-      const name = row.querySelector(".team-name").textContent.trim();
-      teams.push({ name });
-    });
+    if (home.includes("BMU") || away.includes("BMU")) {
+      console.log(`BMU match found: ${home} vs ${away}`);
 
-    const goalDiffElements = document.querySelectorAll(
-      '[data-testid="standings-table-content-goal-diff"]'
-    );
-    teams.forEach((team, index) => {
-      team.goalDifference = parseInt(
-        goalDiffElements[index].textContent.trim()
-      );
-    });
+      // Click the market toggle inside this match
+      const over2Market = '[data-testid="o/u-2.5-market"]';
+      await page.waitForSelector(over2Market);
+      await page.click(over2Market);
+      await delay(2000); // Wait for market to load
+      console.log("Clicked Over/Under 2.5 market, waiting for odds…");
 
-    teams.sort((a, b) => b.goalDifference - a.goalDifference);
-
-    const topTierGD = teams[0].goalDifference;
-    const secondTierGD =
-      teams.find((t) => t.goalDifference < topTierGD)?.goalDifference ||
-      topTierGD;
-
-    return {
-      topTierTeams: teams.filter((t) => t.goalDifference === topTierGD),
-      secondTierTeams: teams.filter((t) => t.goalDifference === secondTierGD),
-    };
-  });
-
-  console.log(
-    "Top Tier Teams:",
-    topTierTeams.map((t) => t.name)
-  );
-  console.log(
-    "Second Tier Teams:",
-    secondTierTeams.map((t) => t.name)
-  );
-
-  // 2. Navigate to matches page
-  await goToBackAndGotoGoalGoalOption(page);
-
-  // 3. Safely evaluate matches
-  let matchesToClick = [];
-  try {
-    matchesToClick = await page.evaluate(
-      (topNames, secondNames) => {
-        const matches = Array.from(
-          document.querySelectorAll("mvs-match") || []
-        )?.slice(0, 9); // Limit to first 9 matches
-        const results = [];
-
-        matches.forEach((match) => {
-          try {
-            const homeTeam = match
-              .querySelector('[data-testid="match-home-team"]')
-              ?.textContent?.trim();
-            const awayTeam = match
-              .querySelector('[data-testid="away-home-team"]')
-              ?.textContent?.trim();
-
-            if (!homeTeam || !awayTeam) return;
-
-            const isTopVsSecond =
-              topNames.includes(homeTeam) && secondNames.includes(awayTeam);
-            const isSecondVsTop =
-              secondNames.includes(homeTeam) && topNames.includes(awayTeam);
-            const isTopVsTop =
-              topNames.includes(homeTeam) && topNames.includes(awayTeam);
-            const isSecondVsSecond =
-              secondNames.includes(homeTeam) && secondNames.includes(awayTeam);
-
-            if (
-              isTopVsSecond ||
-              isSecondVsTop ||
-              isTopVsTop ||
-              isSecondVsSecond
-            ) {
-              const firstOdd = match.querySelector(
-                'mvs-odd[data-testid="match-odd"]'
-              );
-              if (firstOdd) {
-                const oddsValue = firstOdd
-                  .querySelector('[data-testid="match-odd-value"]')
-                  ?.textContent?.trim();
-                results.push({
-                  elementHandle: true, // Mark for later handling
-                  match: `${homeTeam} vs ${awayTeam}`,
-                  type: isTopVsTop
-                    ? "TOP vs TOP"
-                    : isSecondVsSecond
-                    ? "SECOND vs SECOND"
-                    : "TOP vs SECOND",
-                  oddsValue: oddsValue || "N/A",
-                });
-              }
-            }
-          } catch (e) {
-            console.error("Error processing match:", e);
-          }
-        });
-        return results;
-      },
-      topTierTeams.map((t) => t.name),
-      secondTierTeams.map((t) => t.name)
-    );
-  } catch (e) {
-    console.error("Evaluation error:", e);
-  }
-
-  // 4. Click elements using better element handling
-  console.log(`Found ${matchesToClick.length} relevant matches:`);
-
-  for (const match of matchesToClick) {
-    try {
-      console.log(
-        `Attempting to click odds (${match.oddsValue}) for ${match.type} match: ${match.match}`
-      );
-
-      addNewMatch({
-        matchup: match.match,
-        overOdds: match.oddsValue,
+      // Wait globally for odds to load
+      await page.waitForSelector('[data-testid="match-odd-value"]', {
+        timeout: 5000,
       });
 
-      const [home, away] = match.match.split(" vs ");
+      // Grab the first odd (usually Over 2.5)
+      const overOdd = (await page.$$(' [data-testid="match-odd-value"]'))[0];
+      if (!overOdd) {
+        console.log("❌ Odds not found after expanding market");
+        continue;
+      }
+      const footerHeight = 50; // Adjust to your header height
+      // Make sure odds element is still valid before using
+      if (overOdd && (await overOdd.boundingBox())) {
+        await page.evaluate(
+          (el, footerHeight) => {
+            const rect = el.getBoundingClientRect();
+            const viewportHeight = window.innerHeight;
 
-      // Wait for matches to load
-      await page.waitForSelector('[data-testid="match-content"]');
-
-      // Find all match elements
-      const matches = await page.$$('[data-testid="match-content"]');
-
-      // Find the specific match (BMU vs LEV)
-      for (const match of matches.slice(0, 9)) {
-        const homeTeam = await match.$eval(
-          '[data-testid="match-home-team"]',
-          (el) => el.textContent.trim()
-        );
-        const awayTeam = await match.$eval(
-          '[data-testid="away-home-team"]',
-          (el) => el.textContent.trim()
-        );
-
-        if (
-          (homeTeam.includes(home) && awayTeam.includes(away)) ||
-          (homeTeam.includes(away) && awayTeam.includes(home))
-        ) {
-          console.log(`Found match: ${homeTeam} vs ${awayTeam}`);
-
-          // Find the Over 2.5 option (first odd in the pair)
-          const overOdd = await match.$('[data-testid="match-odd-value"]');
-
-          if (overOdd) {
-            console.log("Clicked on Over 2.5 option");
-            const footerHeight = 50; // Adjust to your header height
-            // Check if button is covered by fixed element
-            const isButtonCovered = await page.evaluate(
-              (button, footerHeight) => {
-                const buttonRect = button.getBoundingClientRect();
-                const viewportHeight = window.innerHeight;
-                return buttonRect.bottom > viewportHeight - footerHeight;
-              },
-              overOdd,
-              footerHeight
-            );
-
-            if (!(await overOdd.isIntersectingViewport()) || isButtonCovered) {
-              await page.evaluate(
-                (element, offset) => {
-                  const elementTop = element.getBoundingClientRect().top;
-                  const scrollPosition =
-                    elementTop + window.pageYOffset - offset - 350;
-                  window.scrollTo(0, scrollPosition);
-                },
-                overOdd,
-                footerHeight
-              );
+            // If element is covered by footer or outside viewport
+            if (rect.bottom > viewportHeight - footerHeight || rect.top < 0) {
+              const scrollPosition =
+                rect.top + window.scrollY - viewportHeight / 2;
+              window.scrollTo({ top: scrollPosition, behavior: "smooth" });
             }
-            await overOdd.click();
-            await delay(1500); // Longer delay for stability
-            console.log("Successfully clicked");
-            // Wait for bet slip or confirmation
-          } else {
-            console.log("Over 2.5 option not found");
-          }
 
-          break; // Exit loop after finding our match
-        }
+            // Click inside page context
+            el.click();
+          },
+          overOdd,
+          footerHeight
+        );
+
+        console.log("✅ Successfully scrolled and clicked Over 2.5 odd");
+      } else {
+        console.log("⚠️ overOdd element missing or not visible anymore");
       }
 
-      await getOptionToStake(page, match?.oddsValue);
-    } catch (clickError) {
-      console.error("Click failed:", clickError);
+      const overOdds = await page.evaluate(
+        (el) => el.textContent.trim(),
+        overOdd
+      );
+
+      const result = {
+        matchup: `${home} vs ${away}`,
+        overOdds,
+      };
+
+      console.log("✅ Result:", result);
+      addNewMatch(result); // Save to data.json
+      await getOptionToStake(page, overOdds);
+      console.log("Waiting for 1.5 seconds before next action...");
+
+      await delay(1500); // wait for bet slip
     }
   }
 }
-
-export const getTopTenTeams = async (page, teamsWithLastWin) => {
-  const groupSelector = ".group-standing";
-  await page.waitForSelector(groupSelector);
-  // Get all team name elements
-  const teamNameElements = await page.$$(".team-name");
-  // Get all last match result elements, skipping the first one (header)
-  const lastMatchResultElements = (await page.$$(".form")).slice(1);
-
-  // Calculate minimum count to align data
-  const numItems = Math.min(
-    teamNameElements.length,
-    lastMatchResultElements.length
-  );
-
-  const results = [];
-
-  for (let i = 0; i < numItems; i++) {
-    const teamName = await teamNameElements[i].evaluate((el) =>
-      el.textContent.trim()
-    );
-    const lastChild = await lastMatchResultElements[i].evaluate((el) => {
-      const child = el.lastElementChild;
-      return child ? child.textContent.trim() : "";
-    });
-
-    results.push({
-      id: i + 1, // or start at 0 if you prefer
-      team: teamName,
-      value: lastChild,
-    });
-  }
-
-  teamsWithLastWin = results.slice(0, 10).filter((team) => team.value === "W");
-  fs.writeFileSync(
-    "teamsWithLastWin.json",
-    JSON.stringify(teamsWithLastWin, null, 2)
-  );
-  await delay(1000);
-};
 
 export const gotoTable = async (page) => {
   const hamburger = ".view-switch-icon";
@@ -273,68 +107,15 @@ export const goToBackAndGotoGoalGoalOption = async (page) => {
   await delay(1000);
 };
 
-export const compareSelectedTeams = async (page, filteredMatches) => {
-  // Scrape the data
-  const results = await page.evaluate(() => {
-    // Adjust selectors below to match the website's structure
-    const games = document.querySelectorAll(".match"); // each game container
-    const data = [];
-
-    games.forEach((game) => {
-      const team1 = game.querySelector(".home-team").textContent.trim();
-      const team2 = game.querySelector(".away-team").textContent.trim();
-
-      // Over and under odds - adapt selectors to match actual markup
-      const overOdds =
-        game
-          .querySelectorAll('[data-testid="match-odd-value"]')[0]
-          ?.textContent.trim() || null;
-      const underOdds =
-        game
-          .querySelectorAll('[data-testid="match-odd-value"]')[1]
-          ?.textContent.trim() || null;
-
-      data.push({
-        matchup: `${team1} vs ${team2}`,
-        overOdds,
-        underOdds,
-      });
-    });
-
-    return data;
-  });
-
-  const teamsWithLastWin = JSON.parse(
-    fs.readFileSync("teamsWithLastWin.json", "utf-8")
-  );
-
-  // Create a flat array of team names
-  const teamList = teamsWithLastWin.map((obj) => obj.team);
-
-  filteredMatches = results.slice(0, 9).filter((game) => {
-    const [team1, team2] = game.matchup
-      .split(" vs ")
-      .map((team) => team.trim());
-    return teamList.includes(team1) || teamList.includes(team2);
-  });
-
-  fs.writeFileSync(
-    "filteredMatches.json",
-    JSON.stringify(filteredMatches, null, 2)
-  );
-  await delay(1000);
-  getOptionToStake(page);
-};
-
 const getOptionToStake = async (page, goalOdd) => {
-  const betSlipSelector =
-    "body > app-root > app-wrapper > app-nav-bar > div > app-nav-bar-items > div > div.nav-bar-item.middle.ng-star-inserted";
-  await Promise.all([
-    await delay(1000),
-    await page.waitForSelector(betSlipSelector, { visible: true }),
-    await page.click(betSlipSelector),
-    console.log("Betslip Clicked"),
-  ]);
+  // const betSlipSelector =
+  //   "body > app-root > app-wrapper > app-nav-bar > div > app-nav-bar-items > div > div.nav-bar-item.middle.ng-star-inserted";
+  // await Promise.all([
+  //   await delay(1000),
+  //   await page.waitForSelector(betSlipSelector, { visible: true }),
+  //   await page.click(betSlipSelector),
+  //   console.log("Betslip Clicked"),
+  // ]);
   let stakeAmount;
   let lastGamePlayed = JSON.parse(fs.readFileSync("lastgame.json", "utf-8")); // Default to "W" if file doesn't exist or is empty
   // Step 4: Go BetSlip Page
@@ -371,45 +152,45 @@ const getOptionToStake = async (page, goalOdd) => {
     );
   }
 
-  // Put the stake amount in the input field
-  const stakeInputSelector = '[data-testid="coupon-totals-stake-amount-value"]';
-  const closeOdd = '[data-testid="coupon-place-bet-btn"]';
+  // // Put the stake amount in the input field
+  // const stakeInputSelector = '[data-testid="coupon-totals-stake-amount-value"]';
+  // const closeOdd = '[data-testid="coupon-place-bet-btn"]';
 
-  await Promise.all([
-    await page.waitForSelector(stakeInputSelector, { visible: true }),
-    await page.focus(stakeInputSelector),
-    await page.click(stakeInputSelector, { clickCount: 5, delay: 300 }), // Clear the input
-    await page.type(stakeInputSelector, stakeAmount.toFixed(2)),
+  // await Promise.all([
+  //   await page.waitForSelector(stakeInputSelector, { visible: true }),
+  //   await page.focus(stakeInputSelector),
+  //   await page.click(stakeInputSelector, { clickCount: 5, delay: 300 }), // Clear the input
+  //   await page.type(stakeInputSelector, stakeAmount.toFixed(2)),
 
-    // Step 6: Place the bet
-    await page.waitForSelector(closeOdd),
-    await page.click(closeOdd, { delay: 200 }),
-  ]);
+  //   // Step 6: Place the bet
+  //   await page.waitForSelector(closeOdd),
+  //   await page.click(closeOdd, { delay: 200 }),
+  // ]);
 
   await delay(2000);
   // Step 6: Place the bet
-  const continueButton = await page.waitForSelector("span.btn-text", {
-    visible: true,
-    timeout: 5000,
-  });
+  // const continueButton = await page.waitForSelector("span.btn-text", {
+  //   visible: true,
+  //   timeout: 5000,
+  // });
 
-  const buttonText = await page.evaluate(
-    (button) => button.textContent,
-    continueButton
-  );
-  if (buttonText.includes("Continue Betting")) {
-    await delay(4500);
-    await continueButton.click();
-    console.log('Clicked "Continue Betting" button');
-  } else {
-    console.log("Button with correct text not found");
-  }
+  // const buttonText = await page.evaluate(
+  //   (button) => button.textContent,
+  //   continueButton
+  // );
+  // if (buttonText.includes("Continue Betting")) {
+  //   await delay(4500);
+  //   await continueButton.click();
+  //   console.log('Clicked "Continue Betting" button');
+  // } else {
+  //   console.log("Button with correct text not found");
+  // }
 };
 
 const calculationForFreshGame = (oddValue = 1.78) => {
   // const lastMatchPlayed = "L";
   const odd = oddValue - 1;
-  const profitToMake = 200;
+  const profitToMake = 15;
   let totalAmountLost = profitToMake;
   let stakeAmount = totalAmountLost / odd;
   return stakeAmount;
@@ -462,14 +243,21 @@ export async function trackTimerValue(
           const elementText = await page.$eval(".week", (el) => el.textContent);
           const match = elementText.match(/\d+/); // Extracts the first sequence of digits
           const currentWeek = match ? parseInt(match[0], 10) : null;
-          // const weeksLeft = 34 - currentWeek + 1;
-          if (currentWeek >= 2) {
+          const weeksLeft = 34 - currentWeek + 1;
+          console.log(weeksLeft);
+
+          if (
+            currentWeek >= 1
+            //  && weeksLeft > 7
+          ) {
             await CheckAndPlaySelectedOption(
               page,
               gamesPlayed,
               teamsWithLastWin,
               filteredMatches
             );
+            console.log("Right time to play");
+
             gamesPlayed++;
             console.log(`Games played: ${gamesPlayed}`);
           }
